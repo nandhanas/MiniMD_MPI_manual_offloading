@@ -35,6 +35,7 @@
 #include "atom.h"
 #include "threadData.h"
 #include "timer.h"
+#include "ljs.h"
 
 class Comm
 {

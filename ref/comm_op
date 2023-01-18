@@ -1,0 +1,73 @@
+My rank number is 2 and the communicator size is 8
+Name of the processor: jupiter032.hpcadvisorycouncil.com
+ Im rank 2 inside host
+My rank number is 0 and the communicator size is 8
+Name of the processor: jupiter032.hpcadvisorycouncil.com
+ Im rank 0 inside host
+My rank number is 3 and the communicator size is 8
+Name of the processor: jupiter032.hpcadvisorycouncil.com
+ Im rank 3 inside host
+My rank number is 1 and the communicator size is 8
+Name of the processor: jupiter032.hpcadvisorycouncil.com
+ Im rank 1 inside host
+My rank number is 7 and the communicator size is 8
+Name of the processor: jupiterbf032.hpcadvisorycouncil.com
+ Im rank 7 inside BF
+My rank number is 4 and the communicator size is 8
+Name of the processor: jupiterbf032.hpcadvisorycouncil.com
+ Im rank 4 inside BF
+My rank number is 6 and the communicator size is 8
+Name of the processor: jupiterbf032.hpcadvisorycouncil.com
+ Im rank 6 inside BF
+My rank number is 5 and the communicator size is 8
+Name of the processor: jupiterbf032.hpcadvisorycouncil.com
+ Im rank 5 inside BF
+BF_Host Rank 3, Host rank 3, BF rank 3, BF_Host comm size = 8, Host comm size = 4, BF comm size =4
+BF_Host Rank 2, Host rank 2, BF rank 2, BF_Host comm size = 8, Host comm size = 4, BF comm size =4
+BF_Host Rank 1, Host rank 1, BF rank 1, BF_Host comm size = 8, Host comm size = 4, BF comm size =4
+BF_Host Rank 0, Host rank 0, BF rank 0, BF_Host comm size = 8, Host comm size = 4, BF comm size =4
+BF_Host Rank 6, Host rank 2, BF rank 2, BF_Host comm size = 8, Host comm size = 4, BF comm size =4
+BF_Host Rank 5, Host rank 1, BF rank 1, BF_Host comm size = 8, Host comm size = 4, BF comm size =4
+BF_Host Rank 4, Host rank 0, BF rank 0, BF_Host comm size = 8, Host comm size = 4, BF comm size =4
+BF_Host Rank 7, Host rank 3, BF rank 3, BF_Host comm size = 8, Host comm size = 4, BF comm size =4
+# Create System:
+# Done .... 
+# miniMD-Reference 2.0 (MPI+OpenMP) output ...
+# Run Settings: 
+	# MPI processes: 8
+	# OpenMP threads: 1
+	# Inputfile: in.lj.miniMD
+	# Datafile: None
+# Physics Settings: 
+	# ForceStyle: LJ
+	# Force Parameters: 1.00 1.00
+	# Units: LJ
+	# Atoms: 131072
+	# Atom types: 4
+	# System size: 53.75 53.75 53.75 (unit cells: 32 32 32)
+	# Density: 0.844200
+	# Force cutoff: 2.500000
+	# Timestep size: 0.005000
+# Technical Settings: 
+	# Neigh cutoff: 2.800000
+	# Half neighborlists: 1
+	# Neighbor bins: 26 26 26
+	# Neighbor frequency: 20
+	# Sorting frequency: 20
+	# Thermo frequency: 100
+	# Ghost Newton: 1
+	# Use intrinsics: 0
+	# Do safe exchange: 0
+	# Size of float: 8
+
+# Starting dynamics ...
+# Timestep T U P Time
+0 1.440000e+00 -6.773368e+00 -5.019679e+00  0.000
+100 8.200911e-01 -5.852702e+00 -1.873921e-01  2.546
+
+
+# Performance Summary:
+# MPI_proc OMP_threads nsteps natoms t_total t_force t_neigh t_comm t_other performance perf/thread grep_string t_extra
+8 1 100 131072 2.545964 0.693644 0.126290 1.713837 0.012193 5148226.711491 643528.338936 PERF_SUMMARY 0.023843
+
+

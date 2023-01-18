@@ -1,4 +1,4 @@
-/* ----------------------------------------------------------------------
+/* -----#include "openmp.h"-----------------------------------------------------------------
    miniMD is a simple, parallel molecular dynamics (MD) code.   miniMD is
    an MD microapplication in the Mantevo project at Sandia National
    Laboratories ( http://www.mantevo.org ). The primary
@@ -80,35 +80,62 @@ void ForceLJ::compute(Atom &atom, Neighbor &neighbor, Comm &comm, int me)
 
     if(neighbor.halfneigh) {
       if(neighbor.ghost_newton) {
-        if(threads->omp_num_threads > 1)
-          return compute_halfneigh_threaded<1, 1>(atom, neighbor, me);
-        else
-          return compute_halfneigh<1, 1>(atom, neighbor, me);
+	#pragma omp target data device(1) map(tofrom: atom, neighbor) //offload to DPU
+	{
+        	if(threads->omp_num_threads > 1)
+          		compute_halfneigh_threaded<1, 1>(atom, neighbor, me);
+        	else
+          		compute_halfneigh<1, 1>(atom, neighbor, me);
+	}
+	return;
       } else {
-        if(threads->omp_num_threads > 1)
-          return compute_halfneigh_threaded<1, 0>(atom, neighbor, me);
-        else
-          return compute_halfneigh<1, 0>(atom, neighbor, me);
+        #pragma omp target data device(0) map(tofrom: atom, neighbor) //offload to GPU
+        {      
+        	if(threads->omp_num_threads > 1)
+          		compute_halfneigh_threaded<1, 0>(atom, neighbor, me);
+        	else
+          		compute_halfneigh<1, 0>(atom, neighbor, me);
+	}
+	return;
       }
-    } else return compute_fullneigh<1>(atom, neighbor, me);
+    } else {
+	  #pragma omp target data device(0) map(tofrom: atom, neighbor) //offload to GPU
+          {    
+	         compute_fullneigh<1>(atom, neighbor, me);
+          }
+          return;
+	 }
   } else {
     if(use_oldcompute)
       return compute_original<0>(atom, neighbor, me);
 
     if(neighbor.halfneigh) {
       if(neighbor.ghost_newton) {
-        if(threads->omp_num_threads > 1)
-          return compute_halfneigh_threaded<0, 1>(atom, neighbor, me);
-        else
-          return compute_halfneigh<0, 1>(atom, neighbor, me);
+	#pragma omp target data device(1) map(tofrom: atom, neighbor) //offload to DPU
+        {
+        	if(threads->omp_num_threads > 1)
+                	 compute_halfneigh_threaded<0, 1>(atom, neighbor, me);
+        	else
+                	 compute_halfneigh<0, 1>(atom, neighbor, me);
+	}
+	return;
       } else {
-        if(threads->omp_num_threads > 1)
-          return compute_halfneigh_threaded<0, 0>(atom, neighbor, me);
-        else
-          return compute_halfneigh<0, 0>(atom, neighbor, me);
+	#pragma omp target data device(0) map(tofrom: atom, neighbor) //offload to GPU
+        {
+        	if(threads->omp_num_threads > 1)
+          		compute_halfneigh_threaded<0, 0>(atom, neighbor, me);
+        	else
+          		compute_halfneigh<0, 0>(atom, neighbor, me);
+	}
+	return;
       }
-    } else return compute_fullneigh<0>(atom, neighbor, me);
-
+    } else {
+	 #pragma omp target data device(0) map(tofrom: atom, neighbor) //offload to GPU
+         {
+	      compute_fullneigh<0>(atom, neighbor, me);
+         }
+	 return;
+    }
   }
 }
 

@@ -33,6 +33,7 @@
 #define LJS_H_
 
 #include "types.h"
+#include <mpi.h>
 
 struct In {
   int nx, ny, nz;
@@ -49,5 +50,6 @@ struct In {
   MMD_float neigh_cut;
   int thermo_nstat;
 };
+extern MPI_Comm BFHost_communicator, hosts_communicator, BFs_communicator;
 
 #endif

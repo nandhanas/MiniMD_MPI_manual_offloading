@@ -128,9 +128,9 @@ MMD_float Thermo::energy(Atom &atom, Neighbor &neighbor, Force* force)
   MMD_float eng;
 
   if(sizeof(MMD_float) == 4)
-    MPI_Allreduce(&e_act, &eng, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&e_act, &eng, 1, MPI_FLOAT, MPI_SUM, BFHost_communicator);
   else
-    MPI_Allreduce(&e_act, &eng, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&e_act, &eng, 1, MPI_DOUBLE, MPI_SUM, BFHost_communicator);
 
   return eng / atom.natoms;
 }
@@ -165,9 +165,9 @@ MMD_float Thermo::temperature(Atom &atom)
   #pragma omp master
   {
     if(sizeof(MMD_float) == 4)
-      MPI_Allreduce(&t_act, &t1, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+      MPI_Allreduce(&t_act, &t1, 1, MPI_FLOAT, MPI_SUM, BFHost_communicator);
     else
-      MPI_Allreduce(&t_act, &t1, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+      MPI_Allreduce(&t_act, &t1, 1, MPI_DOUBLE, MPI_SUM, BFHost_communicator);
 
   }
   return t1 * t_scale;
@@ -185,9 +185,9 @@ MMD_float Thermo::pressure(MMD_float t, Force* force)
   MMD_float virial = 0;
 
   if(sizeof(MMD_float) == 4)
-    MPI_Allreduce(&p_act, &virial, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&p_act, &virial, 1, MPI_FLOAT, MPI_SUM, BFHost_communicator);
   else
-    MPI_Allreduce(&p_act, &virial, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&p_act, &virial, 1, MPI_DOUBLE, MPI_SUM, BFHost_communicator);
 
   //printf("Pres: %e %e %e %e\n",t,dof_boltz,virial,p_scale);
   return (t * dof_boltz + virial) * p_scale;

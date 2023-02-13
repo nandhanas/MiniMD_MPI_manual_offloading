@@ -78,17 +78,26 @@ void Thermo::compute(MMD_int iflag, Atom &atom, Neighbor &neighbor, Force* force
   if(iflag > 0 && iflag % nstat) return;
 
   if(iflag == -1 && nstat > 0 && ntimes % nstat == 0) return;
+ 
+  int me;
+  MPI_Comm_rank(MPI_COMM_WORLD, &me); 
+ // printf("Iḿ rank %d, Iḿ inside thermo compute\n", me);
 
   t_act = 0;
   e_act = 0;
   p_act = 0;
   #pragma omp barrier
   t = temperature(atom);
+  // printf("Iḿ rank %d, Iḿ after temperature compute\n", me);
+
   #pragma omp master
   {
     eng = energy(atom, neighbor, force);
+   //  printf("Iḿ rank %d, Iḿ after energy compute\n", me);
 
     p = pressure(t, force);
+  //   printf("Iḿ rank %d, Iḿ after pressure compute\n", me);
+
 
     MMD_int istep = iflag;
 
@@ -112,6 +121,7 @@ void Thermo::compute(MMD_int iflag, Atom &atom, Neighbor &neighbor, Force* force
 
     timer.array[TIME_TOTAL] = oldtime;
   }
+//  printf("Iḿ rank %d, Iḿ at the end of  thermo compute\n", me);
 }
 
 /* reduced potential energy */
@@ -128,9 +138,9 @@ MMD_float Thermo::energy(Atom &atom, Neighbor &neighbor, Force* force)
   MMD_float eng;
 
   if(sizeof(MMD_float) == 4)
-    MPI_Allreduce(&e_act, &eng, 1, MPI_FLOAT, MPI_SUM, BFHost_communicator);
+    MPI_Allreduce(&e_act, &eng, 1, MPI_FLOAT, MPI_SUM, temp_communicator);
   else
-    MPI_Allreduce(&e_act, &eng, 1, MPI_DOUBLE, MPI_SUM, BFHost_communicator);
+    MPI_Allreduce(&e_act, &eng, 1, MPI_DOUBLE, MPI_SUM, temp_communicator);
 
   return eng / atom.natoms;
 }
@@ -165,9 +175,9 @@ MMD_float Thermo::temperature(Atom &atom)
   #pragma omp master
   {
     if(sizeof(MMD_float) == 4)
-      MPI_Allreduce(&t_act, &t1, 1, MPI_FLOAT, MPI_SUM, BFHost_communicator);
+      MPI_Allreduce(&t_act, &t1, 1, MPI_FLOAT, MPI_SUM, temp_communicator);
     else
-      MPI_Allreduce(&t_act, &t1, 1, MPI_DOUBLE, MPI_SUM, BFHost_communicator);
+      MPI_Allreduce(&t_act, &t1, 1, MPI_DOUBLE, MPI_SUM, temp_communicator);
 
   }
   return t1 * t_scale;
@@ -185,9 +195,9 @@ MMD_float Thermo::pressure(MMD_float t, Force* force)
   MMD_float virial = 0;
 
   if(sizeof(MMD_float) == 4)
-    MPI_Allreduce(&p_act, &virial, 1, MPI_FLOAT, MPI_SUM, BFHost_communicator);
+    MPI_Allreduce(&p_act, &virial, 1, MPI_FLOAT, MPI_SUM, temp_communicator);
   else
-    MPI_Allreduce(&p_act, &virial, 1, MPI_DOUBLE, MPI_SUM, BFHost_communicator);
+    MPI_Allreduce(&p_act, &virial, 1, MPI_DOUBLE, MPI_SUM, temp_communicator);
 
   //printf("Pres: %e %e %e %e\n",t,dof_boltz,virial,p_scale);
   return (t * dof_boltz + virial) * p_scale;

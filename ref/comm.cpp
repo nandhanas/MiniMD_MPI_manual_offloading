@@ -76,10 +76,12 @@ int Comm::setup(MMD_float cutneigh, Atom &atom)
   prd[1] = atom.box.yprd;
   prd[2] = atom.box.zprd;
 
+
+
   /* setup 3-d grid of procs */
 
-  MPI_Comm_rank(BFHost_communicator, &me);
-  MPI_Comm_size(BFHost_communicator, &nprocs);
+  MPI_Comm_rank(temp_communicator, &me);
+  MPI_Comm_size(temp_communicator, &nprocs);
 
   MMD_float area[3];
 
@@ -134,7 +136,7 @@ int Comm::setup(MMD_float cutneigh, Atom &atom)
   int reorder = 0;
   periods[0] = periods[1] = periods[2] = 1;
 
-  MPI_Cart_create(BFHost_communicator, 3, procgrid, periods, reorder, &cartesian);
+  MPI_Cart_create(temp_communicator, 3, procgrid, periods, reorder, &cartesian);
   MPI_Cart_get(cartesian, 3, procgrid, periods, myloc);
   MPI_Cart_shift(cartesian, 0, 1, &procneigh[0][0], &procneigh[0][1]);
   MPI_Cart_shift(cartesian, 1, 1, &procneigh[1][0], &procneigh[1][1]);
@@ -184,6 +186,7 @@ int Comm::setup(MMD_float cutneigh, Atom &atom)
     }
 
   MPI_Comm_free(&cartesian);
+
 
   firstrecv = (int*) malloc(maxswap * sizeof(int));
   maxsendlist = (int*) malloc(maxswap * sizeof(int));
@@ -283,8 +286,6 @@ void Comm::communicate(Atom &atom)
   int iswap;
   int pbc_flags[4];
   MMD_float* buf;
-  buf_send_tmp = (MMD_float*) malloc((maxsend + BUFMIN) * sizeof(MMD_float));
-  buf_recv_tmp = (MMD_float*) malloc(maxrecv * sizeof(MMD_float));
 
   for(iswap = 0; iswap < nswap; iswap++) {
 
@@ -297,7 +298,6 @@ void Comm::communicate(Atom &atom)
 
     //#pragma omp barrier
     atom.pack_comm(sendnum[iswap], sendlist[iswap], buf_send, pbc_flags);
-    memcpy(buf_send_tmp, buf_send, sizeof(buf_send));
 
     /* exchange with another proc
        if self, set recv buffer to send buffer */
@@ -305,14 +305,24 @@ void Comm::communicate(Atom &atom)
     if(sendproc[iswap] != me) {
       #pragma omp master
       {
-	#pragma omp target data device(1) map(tofrom: buf_send_tmp, buf_recv_tmp) //offload to DPU
-	{
         	MPI_Datatype type = (sizeof(MMD_float) == 4) ? MPI_FLOAT : MPI_DOUBLE;
-        	MPI_Sendrecv(buf_send_tmp, comm_send_size[iswap], type, sendproc[iswap], 0,
-         	            buf_recv_tmp, comm_recv_size[iswap], type, recvproc[iswap], 0,
-                	    BFHost_communicator, MPI_STATUS_IGNORE);
-	}
-	memcpy(buf_recv, buf_recv_tmp, sizeof(buf_recv));
+		if(isHost)
+                {
+                             MPI_Sendrecv(buf_send, comm_send_size[iswap], type, BF_pair, 0,
+                                buf_recv, comm_recv_size[iswap], type, BF_pair, 0,
+                                BFHost_communicator, MPI_STATUS_IGNORE);
+                }
+                if(isBF)
+                {
+                             MPI_Recv(buf_send, comm_send_size[iswap], type, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+
+                             MPI_Sendrecv(buf_send, comm_send_size[iswap], type, sendproc[iswap], 0,
+                                buf_recv, comm_recv_size[iswap], type, recvproc[iswap], 0,
+                                BFs_communicator, MPI_STATUS_IGNORE);
+
+                             MPI_Send(buf_recv, comm_recv_size[iswap], type, host_pair, 0, BFHost_communicator);
+                }
+
       }
       buf = buf_recv;
     } else buf = buf_send;
@@ -331,8 +341,6 @@ void Comm::reverse_communicate(Atom &atom)
 {
   int iswap;
   MMD_float* buf;
-  buf_send_tmp = (MMD_float*) malloc((maxsend + BUFMIN) * sizeof(MMD_float));
-  buf_recv_tmp = (MMD_float*) malloc(maxrecv * sizeof(MMD_float));
 
   for(iswap = nswap - 1; iswap >= 0; iswap--) {
 
@@ -340,7 +348,6 @@ void Comm::reverse_communicate(Atom &atom)
 
     // #pragma omp barrier
     atom.pack_reverse(recvnum[iswap], firstrecv[iswap], buf_send);
-    memcpy(buf_send_tmp, buf_send, sizeof(buf_send));
     // #pragma omp barrier
     /* exchange with another proc
        if self, set recv buffer to send buffer */
@@ -349,14 +356,24 @@ void Comm::reverse_communicate(Atom &atom)
 
       #pragma omp master
       {
-        #pragma omp target data device(1) map(tofrom: buf_send_tmp, buf_recv_tmp)  //offload to DPU
-	{
         	MPI_Datatype type = (sizeof(MMD_float) == 4) ? MPI_FLOAT : MPI_DOUBLE;
-        	MPI_Sendrecv(buf_send_tmp, reverse_send_size[iswap], type, recvproc[iswap], 0,
-                	     buf_recv_tmp, reverse_recv_size[iswap], type, sendproc[iswap], 0,
-                    	     BFHost_communicator, MPI_STATUS_IGNORE);
-	}
-	memcpy(buf_recv, buf_recv_tmp, sizeof(buf_recv));
+                if(isHost)
+	        {
+          		     MPI_Sendrecv(buf_send, reverse_send_size[iswap], type, BF_pair, 0,
+                   		buf_recv, reverse_recv_size[iswap], type, BF_pair, 0,
+                   		BFHost_communicator, MPI_STATUS_IGNORE);
+      		}
+      		if(isBF)
+      		{	
+                	     MPI_Recv(buf_send, reverse_send_size[iswap], type, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+
+                	     MPI_Sendrecv(buf_send, reverse_send_size[iswap], type, recvproc[iswap], 0,
+                   	        buf_recv, reverse_recv_size[iswap], type, sendproc[iswap], 0,
+                   	        BFs_communicator, MPI_STATUS_IGNORE);
+
+                	     MPI_Send(buf_recv, reverse_recv_size[iswap], type, host_pair, 0, BFHost_communicator);
+      		}
+
       }
       buf = buf_recv;
     } else buf = buf_send;
@@ -530,37 +547,92 @@ void Comm::exchange(Atom &atom)
     #pragma omp barrier
     #pragma omp master
     {
-      #pragma omp target data device(1) map(tofrom: nsend, nrecv1, nrecv2, buf_send_tmp, buf_recv_tmp) //offload to DPU
       {
       atom.nlocal = nlocal - total_nsend;
       nsend = total_nsend * 7;
 
       /* send/recv atoms in both directions
          only if neighboring procs are different */
-
-      MPI_Sendrecv(&nsend, 1, MPI_INT, procneigh[idim][0], 0,
-                   &nrecv1, 1, MPI_INT, procneigh[idim][1], 0,
+      if(isHost)
+      {
+	       MPI_Sendrecv(&nsend, 1, MPI_INT, BF_pair, 0,
+                   &nrecv1, 1, MPI_INT, BF_pair, 0,
                    BFHost_communicator, MPI_STATUS_IGNORE);
+      }
+      if(isBF)
+      {
+	        MPI_Recv(&nsend, 1, MPI_INT, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+
+      		MPI_Sendrecv(&nsend, 1, MPI_INT, procneigh[idim][0], 0,
+                   &nrecv1, 1, MPI_INT, procneigh[idim][1], 0,
+                   BFs_communicator, MPI_STATUS_IGNORE);
+ 
+		MPI_Send(&nrecv1, 1, MPI_INT, host_pair, 0, BFHost_communicator);
+      }
       nrecv = nrecv1;
 
       if(procgrid[idim] > 2) {
-        MPI_Sendrecv(&nsend, 1, MPI_INT, procneigh[idim][1], 0,
-                     &nrecv2, 1, MPI_INT, procneigh[idim][0], 0,
-                     BFHost_communicator, MPI_STATUS_IGNORE);
-        nrecv += nrecv2;
+
+	      if(isHost)
+	      {
+        	       MPI_Sendrecv(&nsend, 1, MPI_INT, BF_pair, 0,
+                	   &nrecv2, 1, MPI_INT, BF_pair, 0,
+                  	   BFHost_communicator, MPI_STATUS_IGNORE);
+      	      }
+      	      if(isBF)
+      	      {
+                	MPI_Recv(&nsend, 1, MPI_INT, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+
+                	MPI_Sendrecv(&nsend, 1, MPI_INT, procneigh[idim][0], 0,
+                   		&nrecv2, 1, MPI_INT, procneigh[idim][1], 0,
+                   		BFs_communicator, MPI_STATUS_IGNORE);
+
+                	MPI_Send(&nrecv2, 1, MPI_INT, host_pair, 0, BFHost_communicator);
+      	     }
+
+	     nrecv += nrecv2;
       }
 
-      if(nrecv > maxrecv) growrecv(nrecv);
+      if(nrecv > maxrecv && isHost) growrecv(nrecv);
 
       MPI_Datatype type = (sizeof(MMD_float) == 4) ? MPI_FLOAT : MPI_DOUBLE;
-      MPI_Sendrecv(buf_send, nsend, type, procneigh[idim][0], 0,
-                   buf_recv, nrecv1, type, procneigh[idim][1], 0,
+      if(isHost)
+      {
+               MPI_Sendrecv(buf_send, nsend, type, BF_pair, 0,
+                   buf_recv, nrecv1, type, BF_pair, 0,
                    BFHost_communicator, MPI_STATUS_IGNORE);
+      }
+      if(isBF)
+      {
+                MPI_Recv(buf_send, nsend, type, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+
+                MPI_Sendrecv(buf_send, nsend, type, procneigh[idim][0], 0,
+                   buf_recv, nrecv1, type, procneigh[idim][1], 0,
+                   BFs_communicator, MPI_STATUS_IGNORE);
+
+                MPI_Send(buf_recv, nrecv1, type, host_pair, 0, BFHost_communicator);
+      }
+
 
       if(procgrid[idim] > 2) {
-        MPI_Sendrecv(buf_send, nsend, type, procneigh[idim][1], 0,
-                     buf_recv+nrecv1, nrecv2, type, procneigh[idim][0], 0,
-                     BFHost_communicator, MPI_STATUS_IGNORE);
+
+	     if(isHost)
+	     {
+        	       MPI_Sendrecv(buf_send, nsend, type, BF_pair, 0,
+                	   buf_recv+nrecv1, nrecv2, type, BF_pair, 0,
+                   	   BFHost_communicator, MPI_STATUS_IGNORE);
+      	     }
+      	     if(isBF)
+      	     {
+                       MPI_Recv(buf_send, nsend, type, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+
+                       MPI_Sendrecv(buf_send, nsend, type, procneigh[idim][0], 0,
+                   		buf_recv+nrecv1, nrecv2, type, procneigh[idim][1], 0,
+                   		BFs_communicator, MPI_STATUS_IGNORE);
+
+                       MPI_Send(buf_recv+nrecv1, nrecv2, type, host_pair, 0, BFHost_communicator);
+      	     }
+
       }
 
       nrecv_atoms = nrecv / 7;
@@ -573,6 +645,7 @@ void Comm::exchange(Atom &atom)
     /* check incoming atoms to see if they are in my box
        if they are, add to my list */
 
+   
     #pragma omp barrier
 
     nrecv = 0;
@@ -613,7 +686,7 @@ void Comm::exchange(Atom &atom)
     }
 
     // #pragma omp barrier
-
+    
   }
 }
 
@@ -622,8 +695,6 @@ void Comm::exchange_all(Atom &atom)
   int i, m, n, idim, nsend, nrecv, nrecv1, nrecv2, nlocal;
   MMD_float lo, hi, value;
   MMD_float* x;
-  buf_send_tmp = (MMD_float*) malloc((maxsend + BUFMIN) * sizeof(MMD_float));
-  buf_recv_tmp = (MMD_float*) malloc(maxrecv * sizeof(MMD_float));
 
   /* enforce PBC */
 
@@ -670,25 +741,53 @@ void Comm::exchange_all(Atom &atom)
         nlocal--;
       } else i++;
     }
-    memcpy(buf_send_tmp, buf_send, sizeof(buf_send));
     atom.nlocal = nlocal;
 
-    #pragma omp target data device(1) map(tofrom: nsend, nrecv, buf_send_tmp, buf_recv_tmp) //offload to DPU
-    {
     /* send/recv atoms in both directions
     *        only if neighboring procs are different */
     for(int ineed = 0; ineed < 2 * need[idim]; ineed += 1) {
       if(ineed < procgrid[idim] - 1) {
-        MPI_Sendrecv(&nsend, 1, MPI_INT, sendproc_exc[iswap], 0,
-                     &nrecv, 1, MPI_INT, recvproc_exc[iswap], 0,
-                     BFHost_communicator, MPI_STATUS_IGNORE);
+
+	if(isHost)
+      	{
+        	   	 MPI_Sendrecv(&nsend, 1, MPI_INT, BF_pair, 0,
+                	  	 &nrecv, 1, MPI_INT, BF_pair, 0,
+                  	 	 BFHost_communicator, MPI_STATUS_IGNORE);
+      	}
+      	if(isBF)
+      	{
+        	        MPI_Recv(&nsend, 1, MPI_INT, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+
+                	MPI_Sendrecv(&nsend, 1, MPI_INT, procneigh[idim][0], 0,
+                   		&nrecv, 1, MPI_INT, procneigh[idim][1], 0,
+                   		BFs_communicator, MPI_STATUS_IGNORE);
+
+                	MPI_Send(&nrecv, 1, MPI_INT, host_pair, 0, BFHost_communicator);
+      	}
+
 
         if(nrecv > maxrecv) growrecv(nrecv);
 
         MPI_Datatype type = (sizeof(MMD_float) == 4) ? MPI_FLOAT : MPI_DOUBLE;
-        MPI_Sendrecv(buf_send_tmp, nsend, type, sendproc_exc[iswap], 0,
-                     buf_recv_tmp, nrecv, type, recvproc_exc[iswap], 0,
-                     BFHost_communicator, MPI_STATUS_IGNORE);
+
+	if(isHost)
+        {
+                         MPI_Sendrecv(buf_send, nsend, type, BF_pair, 0,
+                                 buf_recv, nrecv, type, BF_pair, 0,
+                                 BFHost_communicator, MPI_STATUS_IGNORE);
+        }
+        if(isBF)
+        {
+                        MPI_Recv(buf_send, nsend, type, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+
+                        MPI_Sendrecv(buf_send, nsend, type, sendproc_exc[iswap], 0,
+                                buf_recv, nrecv, type, recvproc_exc[iswap], 0,
+                                BFs_communicator, MPI_STATUS_IGNORE);
+
+                        MPI_Send(buf_recv, nrecv, type, host_pair, 0, BFHost_communicator);
+        }
+
+
 
         /* check incoming atoms to see if they are in my box
         *        if they are, add to my list */
@@ -709,8 +808,6 @@ void Comm::exchange_all(Atom &atom)
 
       iswap += 1;
      }
-    }
-   memcpy(buf_recv, buf_recv_tmp, sizeof(buf_recv));
   }
 }
 
@@ -729,8 +826,6 @@ void Comm::borders(Atom &atom)
   MMD_float lo, hi;
   int pbc_flags[4];
   MMD_float* x;
-  buf_send_tmp = (MMD_float*) malloc((maxsend + BUFMIN) * sizeof(MMD_float));
-  buf_recv_tmp = (MMD_float*) malloc(maxrecv * sizeof(MMD_float));
 
   /* erase all ghost atoms */
 
@@ -845,32 +940,65 @@ void Comm::borders(Atom &atom)
      #pragma omp master
       {
          nsend = nsend_thread[threads->omp_num_threads - 1];
-
         if(sendproc[iswap] != me) {
-         #pragma omp target data device(1) map(tofrom: nsend, nrecv, buf_send_tmp, buf_recv_tmp) //offload to DPU
-         {
-          MPI_Sendrecv(&nsend, 1, MPI_INT, sendproc[iswap], 0,
+     
+	  if(isHost)
+	  {
+
+		MPI_Sendrecv(&nsend, 1, MPI_INT, BF_pair, 0,
+                       &nrecv, 1, MPI_INT, BF_pair, 0,
+                       BFHost_communicator, MPI_STATUS_IGNORE);
+
+          }
+	  if(isBF)
+          {
+                
+		MPI_Recv(&nsend, 1, MPI_INT, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+
+          	MPI_Sendrecv(&nsend, 1, MPI_INT, sendproc[iswap], 0,
                        &nrecv, 1, MPI_INT, recvproc[iswap], 0,
-                       BFHost_communicator, MPI_STATUS_IGNORE);
+                       BFs_communicator, MPI_STATUS_IGNORE);
 
-          if(nrecv * atom.border_size > maxrecv) growrecv(nrecv * atom.border_size);
+		MPI_Send(&nrecv, 1, MPI_INT, host_pair, 0, BFHost_communicator);
 
+          }
+          if((nrecv * atom.border_size > maxrecv) ) growrecv(nrecv * atom.border_size);
           MPI_Datatype type = (sizeof(MMD_float) == 4) ? MPI_FLOAT : MPI_DOUBLE;
-          MPI_Sendrecv(buf_send, nsend * atom.border_size, type, sendproc[iswap], 0,
-                       buf_recv, nrecv * atom.border_size, type, recvproc[iswap], 0,
+
+
+	 if(isHost)
+          {
+
+                MPI_Sendrecv(buf_send,  nsend * atom.border_size, type, BF_pair, 0,
+                       buf_recv,  nrecv * atom.border_size, type, BF_pair, 0,
                        BFHost_communicator, MPI_STATUS_IGNORE);
-	 }
-//	  memcpy(buf_recv, buf_recv_tmp, sizeof(buf_recv));
+
+          }
+          if(isBF)
+          {
+
+                MPI_Recv(buf_send,  nsend* atom.border_size, type, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+
+                MPI_Sendrecv(buf_send,  nsend * atom.border_size, type, sendproc[iswap], 0,
+                       buf_recv,  nrecv * atom.border_size, type, recvproc[iswap], 0,
+                       BFs_communicator, MPI_STATUS_IGNORE);
+               
+                MPI_Send(buf_recv,  nrecv * atom.border_size, type, host_pair, 0, BFHost_communicator);
+
+          }
           buf = buf_recv;
+
         } else {
+	 
           nrecv = nsend;
           buf = buf_send;
         }
 
         nrecv_atoms = nrecv;
-     }  
+     }
+  
       /* unpack buffer */
-
+     
       #pragma omp barrier
       n = atom.nlocal + atom.nghost;
       nrecv = nrecv_atoms;
@@ -879,7 +1007,7 @@ void Comm::borders(Atom &atom)
       for(int i = 0; i < nrecv; i++)
         atom.unpack_border(n + i, &buf[i * 4]);
 
-      // #pragma omp barrier
+      //#pragma omp barrier
 
       /* set all pointers & counters */
 
@@ -896,10 +1024,8 @@ void Comm::borders(Atom &atom)
       }
       #pragma omp barrier
       iswap++;
-    }
+      }
   }
-
-  /* insure buffers are large enough for reverse comm */
 
   int max1, max2;
   max1 = max2 = 0;
@@ -912,6 +1038,7 @@ void Comm::borders(Atom &atom)
   if(max1 > maxsend) growsend(max1);
 
   if(max2 > maxrecv) growrecv(max2);
+  
 }
 
 /* realloc the size of the send buffer as needed with BUFFACTOR & BUFEXTRA */

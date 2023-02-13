@@ -37,6 +37,7 @@
 #include "types.h"
 #include "integrate.h"
 #include "neighbor.h"
+#include "ljs.h"
 
 #include <cstring>
 #include <cstdio>
@@ -283,12 +284,12 @@ int read_lammps_data(Atom &atom, Comm &comm, Neighbor &neighbor, Integrate &inte
   }
 
   int me;
-  MPI_Comm_rank(BFHost_communicator, &me);
+  MPI_Comm_rank(temp_communicator, &me);
 
   /* check that correct # of atoms were created */
 
   int natoms;
-  MPI_Allreduce(&atom.nlocal, &natoms, 1, MPI_INT, MPI_SUM, BFHost_communicator);
+  MPI_Allreduce(&atom.nlocal, &natoms, 1, MPI_INT, MPI_SUM, temp_communicator);
 
   if(natoms != atom.natoms) {
     if(me == 0) printf("Created incorrect # of atoms\n");
@@ -424,10 +425,10 @@ int create_atoms(Atom &atom, int nx, int ny, int nz, double rho)
   /* check for overflows on any proc */
 
   int me;
-  MPI_Comm_rank(BFHost_communicator, &me);
+  MPI_Comm_rank(temp_communicator, &me);
 
   int iflagall;
-  MPI_Allreduce(&iflag, &iflagall, 1, MPI_INT, MPI_MAX, BFHost_communicator);
+  MPI_Allreduce(&iflag, &iflagall, 1, MPI_INT, MPI_MAX, temp_communicator);
 
   if(iflagall) {
     if(me == 0) printf("No memory for atoms\n");
@@ -438,7 +439,7 @@ int create_atoms(Atom &atom, int nx, int ny, int nz, double rho)
   /* check that correct # of atoms were created */
 
   int natoms;
-  MPI_Allreduce(&atom.nlocal, &natoms, 1, MPI_INT, MPI_SUM, BFHost_communicator);
+  MPI_Allreduce(&atom.nlocal, &natoms, 1, MPI_INT, MPI_SUM, temp_communicator);
 
   if(natoms != atom.natoms) {
     if(me == 0) printf("Created incorrect # of atoms\n");
@@ -468,11 +469,11 @@ void create_velocity(double t_request, Atom &atom, Thermo &thermo)
   }
 
   double tmp;
-  MPI_Allreduce(&vxtot, &tmp, 1, MPI_DOUBLE, MPI_SUM, BFHost_communicator);
+  MPI_Allreduce(&vxtot, &tmp, 1, MPI_DOUBLE, MPI_SUM, temp_communicator);
   vxtot = tmp / atom.natoms;
-  MPI_Allreduce(&vytot, &tmp, 1, MPI_DOUBLE, MPI_SUM, BFHost_communicator);
+  MPI_Allreduce(&vytot, &tmp, 1, MPI_DOUBLE, MPI_SUM, temp_communicator);
   vytot = tmp / atom.natoms;
-  MPI_Allreduce(&vztot, &tmp, 1, MPI_DOUBLE, MPI_SUM, BFHost_communicator);
+  MPI_Allreduce(&vztot, &tmp, 1, MPI_DOUBLE, MPI_SUM, temp_communicator);
   vztot = tmp / atom.natoms;
 
   for(i = 0; i < atom.nlocal; i++) {

@@ -50,7 +50,9 @@
 
 #define MAXLINE 256
 
-MPI_Comm BFHost_communicator, hosts_communicator, BFs_communicator;
+MPI_Comm BFHost_communicator, hosts_communicator, BFs_communicator, temp_communicator;
+int isHost, isBF, host_pair, BF_pair;
+int hosts_comm_size, bfhost_comm_size, BF_comm_size, host_rank, BFhost_rank, BF_rank;
 int input(In &, const char*);
 void create_box(Atom &, int, int, int, double);
 int create_atoms(Atom &, int, int, int, double);
@@ -100,14 +102,15 @@ int main(int argc, char** argv)
   int name_len;
   MPI_Get_processor_name(processor, &name_len);
   printf("Name of the processor: %s\n", processor);
-  int color, key, isHost, isBF;
+  int color, key;
   if(processor[7]=='b')  //places of the string array according to jupiterbf031 . Need to change the array number for thor.
   {
 	 isBF = 1;
 	 isHost = 0;
          key = 1;
          color = (processor[10]-'0')*10+(processor[11]-'0');
-	 printf(" Im rank %d inside BF\n", me);
+	  host_pair = me - (nprocs/2);
+	 printf(" Im rank %d inside BF , host pair %d\n", me, host_pair);
   }
   else
   {
@@ -115,12 +118,13 @@ int main(int argc, char** argv)
 	 isBF = 0;
          key = 0;
          color = (processor[8]-'0')*10+(processor[9]-'0');
-	 printf(" Im rank %d inside host\n", me);
+	  BF_pair = me + (nprocs/2);
+	 printf(" Im rank %d inside host BF pair %d\n", me, BF_pair);
   }
   MPI_Comm_split(MPI_COMM_WORLD, color, key, &BFHost_communicator); //communicator for host and bf with same device number
   MPI_Comm_split(MPI_COMM_WORLD, isHost, color, &hosts_communicator); // communicator for all the hosts with rank as the device number
   MPI_Comm_split(MPI_COMM_WORLD, isBF, color, &BFs_communicator);  // communicator for all the BFs with rank as the device number
-  int hosts_comm_size, bfhost_comm_size, BF_comm_size, host_rank, BFhost_rank, BF_rank;
+  //int hosts_comm_size, bfhost_comm_size, BF_comm_size, host_rank, BFhost_rank, BF_rank;
   MPI_Comm_size(BFHost_communicator, &bfhost_comm_size);
   MPI_Comm_rank(BFHost_communicator, &BFhost_rank);
   MPI_Comm_size(hosts_communicator, &hosts_comm_size);
@@ -128,6 +132,14 @@ int main(int argc, char** argv)
   MPI_Comm_size(BFs_communicator, &BF_comm_size);
   MPI_Comm_rank(BFs_communicator, &BF_rank);
   printf("BF_Host Rank %d, Host rank %d, BF rank %d, BF_Host comm size = %d, Host comm size = %d, BF comm size =%d\n", BFhost_rank, host_rank, BF_rank, bfhost_comm_size, hosts_comm_size, BF_comm_size);
+  
+
+  if(isHost)
+          MPI_Comm_dup(hosts_communicator, &temp_communicator);
+  if(isBF)
+          MPI_Comm_dup(BFs_communicator, &temp_communicator);
+
+  printf("Iḿ rank %d, Iḿ after dup communicator\n", me);
   int error = 0;
 
   if(input_file == NULL)
@@ -426,18 +438,27 @@ int main(int argc, char** argv)
 
     comm.setup(neighbor.cutneigh, atom);
 
+   // printf("Iḿ rank %d, Iḿ after comm setup\n", me);
+
     neighbor.setup(atom);
 
+   // printf("Iḿ rank %d, Iḿ after neighbor setup\n", me);
     integrate.setup();
 
+  //  printf("Iḿ rank %d, Iḿ after integrate setup\n", me);
     force->setup();
+  //  printf("Iḿ rank %d, Iḿ after force setup\n", me);
 
     if(in.forcetype == FORCEEAM) atom.mass = force->mass;
 
      create_atoms(atom, in.nx, in.ny, in.nz, in.rho);
+  //    printf("Iḿ rank %d, Iḿ after create atoms\n", me);
+
     thermo.setup(in.rho, integrate, atom, in.units);
+// printf("Iḿ rank %d, Iḿ after thermo setup\n", me);
     
      create_velocity(in.t_request, atom, thermo);
+// printf("Iḿ rank %d, Iḿ after create velocity\n", me);
     
   }
 
@@ -476,22 +497,25 @@ int main(int argc, char** argv)
   
  
   comm.exchange(atom);
+ // printf("Iḿ rank %d, Iḿ after comm exchange\n", me);
   if(sort>0)
     atom.sort(neighbor);
   comm.borders(atom);
+ // printf("Iḿ rank %d, Iḿ after comm borders\n", me);
   force->evflag = 1;
 
   #pragma omp parallel
   {
     neighbor.build(atom);
+    //printf("Iḿ rank %d, Iḿ after neighbor build\n", me);
   
     force->compute(atom, neighbor, comm, me);
+  //  printf("Iḿ rank %d, Iḿ after force compute\n", me);
   }
-
 
   if(neighbor.halfneigh && neighbor.ghost_newton)
     comm.reverse_communicate(atom);
-  
+ // printf("Iḿ rank %d, Iḿ in main after 1st reverse communicate\n", me);  
   if(me == 0) printf("# Starting dynamics ...\n");
 
   if(me == 0) printf("# Timestep T U P Time\n");
@@ -501,22 +525,29 @@ int main(int argc, char** argv)
     thermo.compute(0, atom, neighbor, force, timer, comm);
   }
  
-  MPI_Barrier(BFHost_communicator);
+//  MPI_Barrier(BFHost_communicator);
+ // printf("Iḿ rank %d, Iḿ after thermo compute\n", me);
   timer.barrier_start(TIME_TOTAL);
   integrate.run(atom, force, neighbor, comm, thermo, timer);
   timer.barrier_stop(TIME_TOTAL);
-  
+ // printf("Iḿ rank %d, Iḿ after integrate\n", me);
  
   int natoms;
-  MPI_Allreduce(&atom.nlocal, &natoms, 1, MPI_INT, MPI_SUM, BFHost_communicator);
+  MPI_Allreduce(&atom.nlocal, &natoms, 1, MPI_INT, MPI_SUM, temp_communicator);
 
   force->evflag = 1;
   force->compute(atom, neighbor, comm, me);
 
   if(neighbor.halfneigh && neighbor.ghost_newton)
     comm.reverse_communicate(atom);
+
+  //printf("Iḿ rank %d, Iḿ after reverse communicate\n", me);
+
   
   thermo.compute(-1, atom, neighbor, force, timer, comm);
+
+//   printf("Iḿ rank %d, Iḿ after thermo compute\n", me);
+
 
   if(me == 0) {
     double time_other = timer.array[TIME_TOTAL] - timer.array[TIME_FORCE] - timer.array[TIME_NEIGH] - timer.array[TIME_COMM];
@@ -535,7 +566,7 @@ int main(int argc, char** argv)
  
   delete force;
  
-  MPI_Barrier(BFHost_communicator);
+  MPI_Barrier(temp_communicator);
   MPI_Finalize();
   return 0;
 }

@@ -50,6 +50,7 @@ struct In {
   MMD_float neigh_cut;
   int thermo_nstat;
 };
-extern MPI_Comm BFHost_communicator, hosts_communicator, BFs_communicator;
-
+extern MPI_Comm BFHost_communicator, hosts_communicator, BFs_communicator, temp_communicator;
+extern int isHost, isBF, host_pair, BF_pair;
+extern int hosts_comm_size, bfhost_comm_size, BF_comm_size, host_rank, BFhost_rank, BF_rank;
 #endif

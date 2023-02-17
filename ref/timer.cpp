@@ -32,6 +32,7 @@
 #include "stdlib.h"
 #include "mpi.h"
 #include "timer.h"
+#include "ljs.h"
 
 Timer::Timer()
 {
@@ -95,7 +96,7 @@ void Timer::stamp_extra_stop(int which)
 
 void Timer::barrier_start(int which)
 {
-  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Barrier(temp_communicator);
 #ifdef PREC_TIMER
   timespec current_time;
   clock_gettime(CLOCK_REALTIME, &current_time);
@@ -107,7 +108,7 @@ void Timer::barrier_start(int which)
 
 void Timer::barrier_stop(int which)
 {
-  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Barrier(temp_communicator);
 #ifdef PREC_TIMER
   timespec current_time;
   clock_gettime(CLOCK_REALTIME, &current_time);

@@ -71,7 +71,6 @@ void Integrate::run(Atom &atom, Force* force, Neighbor &neighbor,
                     Comm &comm, Thermo &thermo, Timer &timer)
 {
   int i, n;
-
   comm.timer = &timer;
   timer.array[TIME_TEST] = 0.0;
 
@@ -154,11 +153,13 @@ void Integrate::run(Atom &atom, Force* force, Neighbor &neighbor,
           #pragma omp master
           timer.stamp_extra_start();
           comm.exchange(atom);
+
           if(n+1>=next_sort) {
             atom.sort(neighbor);
             next_sort +=  sort_every;
           }
           comm.borders(atom);
+
           #pragma omp master
           {
             timer.stamp_extra_stop(TIME_TEST);
@@ -178,19 +179,24 @@ void Integrate::run(Atom &atom, Force* force, Neighbor &neighbor,
         #pragma omp master
         timer.stamp(TIME_NEIGH);
       }
-
       force->evflag = (n + 1) % thermo.nstat == 0;
       force->compute(atom, neighbor, comm, comm.me);
 
       #pragma omp master
       timer.stamp(TIME_FORCE);
-
       if(neighbor.halfneigh && neighbor.ghost_newton) {
+//	printf("i'm before computation offload in integrate\n");
+//	comm.reverse_force_computation_offload(atom);
+//	  printf("i'm after computation offload in integrate\n");
+//	MPI_Barrier(BFHost_communicator);
         comm.reverse_communicate(atom);
+//	MPI_Barrier(BFHost_communicator);
 
+//	  printf("i'm after reverse comm  in integrate\n");
         #pragma omp master
         timer.stamp(TIME_COMM);
       }
+
 
       v = atom.v;
       f = atom.f;
@@ -200,7 +206,7 @@ void Integrate::run(Atom &atom, Force* force, Neighbor &neighbor,
 
       finalIntegrate();
 
-      if(thermo.nstat) thermo.compute(n + 1, atom, neighbor, force, timer, comm);
+      if(thermo.nstat && isHost) thermo.compute(n + 1, atom, neighbor, force, timer, comm);
 
     }
   } //end OpenMP parallel

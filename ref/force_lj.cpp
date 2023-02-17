@@ -80,8 +80,9 @@ void ForceLJ::compute(Atom &atom, Neighbor &neighbor, Comm &comm, int me)
 
     if(neighbor.halfneigh) {
       if(neighbor.ghost_newton) {
-	#pragma omp target data device(1) map(tofrom: atom, neighbor) //offload to DPU
+	if(isBF)//offload to DPU
 	{
+
         	if(threads->omp_num_threads > 1)
           		compute_halfneigh_threaded<1, 1>(atom, neighbor, me);
         	else
@@ -89,7 +90,7 @@ void ForceLJ::compute(Atom &atom, Neighbor &neighbor, Comm &comm, int me)
 	}
 	return;
       } else {
-        #pragma omp target data device(0) map(tofrom: atom, neighbor) //offload to GPU
+        if(isHost) //offload to GPU
         {      
         	if(threads->omp_num_threads > 1)
           		compute_halfneigh_threaded<1, 0>(atom, neighbor, me);
@@ -99,7 +100,7 @@ void ForceLJ::compute(Atom &atom, Neighbor &neighbor, Comm &comm, int me)
 	return;
       }
     } else {
-	  #pragma omp target data device(0) map(tofrom: atom, neighbor) //offload to GPU
+	  if(isHost) //offload to GPU
           {    
 	         compute_fullneigh<1>(atom, neighbor, me);
           }
@@ -107,11 +108,16 @@ void ForceLJ::compute(Atom &atom, Neighbor &neighbor, Comm &comm, int me)
 	 }
   } else {
     if(use_oldcompute)
-      return compute_original<0>(atom, neighbor, me);
-
+    {
+	    if(isHost) //offload to GPU
+            {
+     		 compute_original<0>(atom, neighbor, me);
+	    }
+	    return;
+    }
     if(neighbor.halfneigh) {
       if(neighbor.ghost_newton) {
-	#pragma omp target data device(1) map(tofrom: atom, neighbor) //offload to DPU
+	if(isBF) //offload to DPU
         {
         	if(threads->omp_num_threads > 1)
                 	 compute_halfneigh_threaded<0, 1>(atom, neighbor, me);
@@ -120,7 +126,7 @@ void ForceLJ::compute(Atom &atom, Neighbor &neighbor, Comm &comm, int me)
 	}
 	return;
       } else {
-	#pragma omp target data device(0) map(tofrom: atom, neighbor) //offload to GPU
+	if(isHost) //offload to GPU
         {
         	if(threads->omp_num_threads > 1)
           		compute_halfneigh_threaded<0, 0>(atom, neighbor, me);
@@ -130,7 +136,7 @@ void ForceLJ::compute(Atom &atom, Neighbor &neighbor, Comm &comm, int me)
 	return;
       }
     } else {
-	 #pragma omp target data device(0) map(tofrom: atom, neighbor) //offload to GPU
+	 if(isHost) //offload to GPU
          {
 	      compute_fullneigh<0>(atom, neighbor, me);
          }

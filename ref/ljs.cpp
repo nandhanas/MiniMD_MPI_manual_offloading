@@ -438,27 +438,20 @@ int main(int argc, char** argv)
 
     comm.setup(neighbor.cutneigh, atom);
 
-   // printf("Iḿ rank %d, Iḿ after comm setup\n", me);
 
     neighbor.setup(atom);
 
-   // printf("Iḿ rank %d, Iḿ after neighbor setup\n", me);
     integrate.setup();
 
-  //  printf("Iḿ rank %d, Iḿ after integrate setup\n", me);
     force->setup();
-  //  printf("Iḿ rank %d, Iḿ after force setup\n", me);
 
     if(in.forcetype == FORCEEAM) atom.mass = force->mass;
 
      create_atoms(atom, in.nx, in.ny, in.nz, in.rho);
-  //    printf("Iḿ rank %d, Iḿ after create atoms\n", me);
 
-    thermo.setup(in.rho, integrate, atom, in.units);
-// printf("Iḿ rank %d, Iḿ after thermo setup\n", me);
+     thermo.setup(in.rho, integrate, atom, in.units);
     
      create_velocity(in.t_request, atom, thermo);
-// printf("Iḿ rank %d, Iḿ after create velocity\n", me);
     
   }
 
@@ -505,20 +498,17 @@ int main(int argc, char** argv)
   #pragma omp parallel
   {
     neighbor.build(atom);
-    //printf("Iḿ rank %d, Iḿ after neighbor build\n", me);
-   
+
+    
     force->compute(atom, neighbor, comm, me);
-  //  printf("Iḿ rank %d, Iḿ after force compute\n", me);
   }
    //MPI_Barrier(BFHost_communicator);
 
   if(neighbor.halfneigh && neighbor.ghost_newton)
   {
-    comm.reverse_force_computation_offload(atom);
-    MPI_Barrier(BFHost_communicator);
     comm.reverse_communicate(atom);
   }
- // printf("Iḿ rank %d, Iḿ in main after 1st reverse communicate\n", me);  
+
   if(me == 0) printf("# Starting dynamics ...\n");
 
   if(me == 0) printf("# Timestep T U P Time\n");
@@ -529,33 +519,26 @@ int main(int argc, char** argv)
     	thermo.compute(0, atom, neighbor, force, timer, comm);
   }
  
-  //MPI_Barrier(BFHost_communicator);
   timer.barrier_start(TIME_TOTAL);
   integrate.run(atom, force, neighbor, comm, thermo, timer);
   timer.barrier_stop(TIME_TOTAL);
-  //MPI_Barrier(BFHost_communicator);
  
-//  printf("Iḿ rank %d, Iḿ in main after integrate reverse communicate\n", me);
   int natoms;
   MPI_Allreduce(&atom.nlocal, &natoms, 1, MPI_INT, MPI_SUM, temp_communicator);
 
+
   force->evflag = 1;
   force->compute(atom, neighbor, comm, me);
-  //printf("Iḿ rank %d, Iḿ after force compute 2", me);
 
   if(neighbor.halfneigh && neighbor.ghost_newton)
   {
-    comm.reverse_force_computation_offload(atom);
-    MPI_Barrier(BFHost_communicator);
     comm.reverse_communicate(atom);
   }
 
-  //printf("Iḿ rank %d, Iḿ after 2nd reverse communicate\n", me);
 
   if(isHost)
   	thermo.compute(-1, atom, neighbor, force, timer, comm);
 
-//   printf("Iḿ rank %d, Iḿ after thermo compute\n", me);
 
 
   if(me == 0) {

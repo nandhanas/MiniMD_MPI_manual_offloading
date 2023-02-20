@@ -335,35 +335,77 @@ void Comm::communicate(Atom &atom)
   }
 }
 
+void Comm::force_computation_offload(Atom &atom)
+{
+	int features[2] = {atom.nlocal, atom.nghost};
+        int iswap;
+        int pbc_flags[4];
+
+	for(iswap = 0; iswap < nswap; iswap++) {
+
+		pbc_flags[0] = pbc_any[iswap];
+	        pbc_flags[1] = pbc_flagx[iswap];
+    		pbc_flags[2] = pbc_flagy[iswap];
+    		pbc_flags[3] = pbc_flagz[iswap];
+
+		atom.pack_comm(sendnum[iswap], sendlist[iswap], buf_send, pbc_flags);
+
+
+         	if(sendproc[iswap] != me) {
+
+                        #pragma omp master
+			{
+ 				MPI_Datatype type = (sizeof(MMD_float) == 4) ? MPI_FLOAT : MPI_DOUBLE;
+
+				if(isHost)
+  				{
+        	 			MPI_Send(features, 2, MPI_INT, BF_pair, 0, BFHost_communicator);
+			 		MPI_Send(buf_send, comm_send_size[iswap], type, BF_pair, 0, BFHost_communicator); 
+		  		}
+ 				if(isBF)
+  				{
+         	 			MPI_Recv(features, 2, MPI_INT, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+			  		MPI_Recv(buf_send, comm_send_size[iswap], type, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+  				}
+			}
+		}
+		#pragma omp barrier
+                 atom.unpack_comm(recvnum[iswap], firstrecv[iswap], buf);
+
+	}
+ }
+
+
+
 /* reverse offload from BF to host for boundary atom info every timestep */
 
 void Comm::reverse_force_computation_offload(Atom &atom)
 {
   int iswap;
-  MMD_float* buf;
 
   for(iswap = nswap - 1; iswap >= 0; iswap--) {
 	
-	if(isBF) atom.pack_reverse(recvnum[iswap], firstrecv[iswap], buf_send);
+	atom.pack_reverse(recvnum[iswap], firstrecv[iswap], buf_send);
         
+        if(sendproc[iswap] != me) {
+      		#pragma omp master
+      		{	
+                	MPI_Datatype type = (sizeof(MMD_float) == 4) ? MPI_FLOAT : MPI_DOUBLE;
+                	if(isBF)
+                	{
+				MPI_Send(buf_send, reverse_send_size[iswap], type, host_pair, 0, BFHost_communicator);
+                	}
+                	if(isHost)
+                	{
+                        	MPI_Recv(buf_send, reverse_send_size[iswap], type, BF_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+                	}
 
-      	#pragma omp master
-      	{
-                MPI_Datatype type = (sizeof(MMD_float) == 4) ? MPI_FLOAT : MPI_DOUBLE;
-                if(isBF)
-                {
-			MPI_Send(buf_send, reverse_send_size[iswap], type, host_pair, 0, BFHost_communicator);
-                }
-                if(isHost)
-                {
-                        MPI_Recv(buf_recv, reverse_send_size[iswap], type, BF_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
-
-                }
-
-       }
+       		}
+	}
     
       #pragma omp barrier
-      if(isHost) atom.unpack_reverse(sendnum[iswap], sendlist[iswap], buf_recv);
+      atom.unpack_reverse(sendnum[iswap], sendlist[iswap], buf_send);
+
   }
  }
 

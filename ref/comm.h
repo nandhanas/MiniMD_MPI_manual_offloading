@@ -45,6 +45,7 @@ class Comm
     int setup(MMD_float, Atom &);
     void communicate(Atom &);
     void reverse_communicate(Atom &);
+    void force_computation_offload(Atom &);
     void reverse_force_computation_offload(Atom &);
     void exchange(Atom &);
     void exchange_all(Atom &);

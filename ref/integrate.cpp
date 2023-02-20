@@ -179,20 +179,16 @@ void Integrate::run(Atom &atom, Force* force, Neighbor &neighbor,
         #pragma omp master
         timer.stamp(TIME_NEIGH);
       }
+
+
       force->evflag = (n + 1) % thermo.nstat == 0;
       force->compute(atom, neighbor, comm, comm.me);
 
       #pragma omp master
       timer.stamp(TIME_FORCE);
       if(neighbor.halfneigh && neighbor.ghost_newton) {
-//	printf("i'm before computation offload in integrate\n");
-//	comm.reverse_force_computation_offload(atom);
-//	  printf("i'm after computation offload in integrate\n");
-//	MPI_Barrier(BFHost_communicator);
         comm.reverse_communicate(atom);
-//	MPI_Barrier(BFHost_communicator);
 
-//	  printf("i'm after reverse comm  in integrate\n");
         #pragma omp master
         timer.stamp(TIME_COMM);
       }

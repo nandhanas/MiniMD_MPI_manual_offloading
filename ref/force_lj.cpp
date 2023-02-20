@@ -73,6 +73,7 @@ void ForceLJ::compute(Atom &atom, Neighbor &neighbor, Comm &comm, int me)
 {
   eng_vdwl = 0;
   virial = 0;
+ 
 
   if(evflag) {
     if(use_oldcompute)
@@ -80,14 +81,15 @@ void ForceLJ::compute(Atom &atom, Neighbor &neighbor, Comm &comm, int me)
 
     if(neighbor.halfneigh) {
       if(neighbor.ghost_newton) {
+	comm.force_computation_offload(atom);
 	if(isBF)//offload to DPU
 	{
-
         	if(threads->omp_num_threads > 1)
           		compute_halfneigh_threaded<1, 1>(atom, neighbor, me);
         	else
           		compute_halfneigh<1, 1>(atom, neighbor, me);
 	}
+	comm.reverse_force_computation_offload(atom);
 	return;
       } else {
         if(isHost) //offload to GPU
@@ -117,6 +119,7 @@ void ForceLJ::compute(Atom &atom, Neighbor &neighbor, Comm &comm, int me)
     }
     if(neighbor.halfneigh) {
       if(neighbor.ghost_newton) {
+	comm.force_computation_offload(atom);
 	if(isBF) //offload to DPU
         {
         	if(threads->omp_num_threads > 1)
@@ -124,6 +127,7 @@ void ForceLJ::compute(Atom &atom, Neighbor &neighbor, Comm &comm, int me)
         	else
                 	 compute_halfneigh<0, 1>(atom, neighbor, me);
 	}
+	comm.reverse_force_computation_offload(atom);
 	return;
       } else {
 	if(isHost) //offload to GPU

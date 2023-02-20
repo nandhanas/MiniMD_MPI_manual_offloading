@@ -79,24 +79,18 @@ void Thermo::compute(MMD_int iflag, Atom &atom, Neighbor &neighbor, Force* force
 
   if(iflag == -1 && nstat > 0 && ntimes % nstat == 0) return;
  
-  int me;
-  MPI_Comm_rank(MPI_COMM_WORLD, &me); 
- // printf("Iḿ rank %d, Iḿ inside thermo compute\n", me);
 
   t_act = 0;
   e_act = 0;
   p_act = 0;
   #pragma omp barrier
   t = temperature(atom);
-  // printf("Iḿ rank %d, Iḿ after temperature compute\n", me);
 
   #pragma omp master
   {
     eng = energy(atom, neighbor, force);
-   //  printf("Iḿ rank %d, Iḿ after energy compute\n", me);
 
     p = pressure(t, force);
-  //   printf("Iḿ rank %d, Iḿ after pressure compute\n", me);
 
 
     MMD_int istep = iflag;
@@ -121,7 +115,6 @@ void Thermo::compute(MMD_int iflag, Atom &atom, Neighbor &neighbor, Force* force
 
     timer.array[TIME_TOTAL] = oldtime;
   }
-//  printf("Iḿ rank %d, Iḿ at the end of  thermo compute\n", me);
 }
 
 /* reduced potential energy */

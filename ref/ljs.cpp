@@ -451,7 +451,7 @@ int main(int argc, char** argv)
 
      thermo.setup(in.rho, integrate, atom, in.units);
     
-     create_velocity(in.t_request, atom, thermo);
+     if(isHost) create_velocity(in.t_request, atom, thermo);
     
   }
 

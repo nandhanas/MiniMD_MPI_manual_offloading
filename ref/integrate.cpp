@@ -93,7 +93,6 @@ void Integrate::run(Atom &atom, Force* force, Neighbor &neighbor,
       f = atom.f;
       xold = atom.xold;
       nlocal = atom.nlocal;
-
       initialIntegrate();
 
       #pragma omp master
@@ -172,8 +171,7 @@ void Integrate::run(Atom &atom, Force* force, Neighbor &neighbor,
 
         #pragma omp barrier
 
-        neighbor.build(atom);
-
+         neighbor.build(atom);
         // #pragma omp barrier
 
         #pragma omp master

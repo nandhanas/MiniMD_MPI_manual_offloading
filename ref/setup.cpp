@@ -356,7 +356,7 @@ int create_atoms(Atom &atom, int nx, int ny, int nz, double rho)
   int subboxdim = 8;
 
   int iflag = 0;
-
+ 
   while(oz * subboxdim <= khi) {
     k = oz * subboxdim + sz;
     j = oy * subboxdim + sy;
@@ -420,7 +420,8 @@ int create_atoms(Atom &atom, int nx, int ny, int nz, double rho)
       oy = 0;
       oz++;
     }
-  }
+    
+ }
 
   /* check for overflows on any proc */
 

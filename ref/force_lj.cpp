@@ -68,6 +68,27 @@ void ForceLJ::setup()
     cutforcesq[i] = cutforce * cutforce;
 }
 
+void ForceLJ::reverse_offload(Atom &atom, Comm &comm)
+{
+
+//        comm.reverse_force_computation_offload(atom);
+	MMD_float features[2] = {eng_vdwl, virial};
+	MPI_Datatype type = (sizeof(MMD_float) == 4) ? MPI_FLOAT : MPI_DOUBLE;
+
+	if(isBF)
+        {
+		MPI_Send(features, 2, type, host_pair, 0, BFHost_communicator);
+
+        }
+        if(isHost)
+        {
+		MPI_Recv(features, 2, type, BF_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+                eng_vdwl = features[0];
+		virial = features[1];
+        }
+        
+}
+
 
 void ForceLJ::compute(Atom &atom, Neighbor &neighbor, Comm &comm, int me)
 {
@@ -81,7 +102,7 @@ void ForceLJ::compute(Atom &atom, Neighbor &neighbor, Comm &comm, int me)
 
     if(neighbor.halfneigh) {
       if(neighbor.ghost_newton) {
-	comm.force_computation_offload(atom);
+//	comm.force_computation_offload(atom, neighbor);
 	if(isBF)//offload to DPU
 	{
         	if(threads->omp_num_threads > 1)
@@ -89,7 +110,7 @@ void ForceLJ::compute(Atom &atom, Neighbor &neighbor, Comm &comm, int me)
         	else
           		compute_halfneigh<1, 1>(atom, neighbor, me);
 	}
-	comm.reverse_force_computation_offload(atom);
+	reverse_offload(atom, comm);
 	return;
       } else {
         if(isHost) //offload to GPU
@@ -119,7 +140,7 @@ void ForceLJ::compute(Atom &atom, Neighbor &neighbor, Comm &comm, int me)
     }
     if(neighbor.halfneigh) {
       if(neighbor.ghost_newton) {
-	comm.force_computation_offload(atom);
+//	comm.force_computation_offload(atom, neighbor);
 	if(isBF) //offload to DPU
         {
         	if(threads->omp_num_threads > 1)
@@ -127,7 +148,7 @@ void ForceLJ::compute(Atom &atom, Neighbor &neighbor, Comm &comm, int me)
         	else
                 	 compute_halfneigh<0, 1>(atom, neighbor, me);
 	}
-	comm.reverse_force_computation_offload(atom);
+	reverse_offload(atom, comm);
 	return;
       } else {
 	if(isHost) //offload to GPU
@@ -222,11 +243,14 @@ void ForceLJ::compute_original(Atom &atom, Neighbor &neighbor, int me)
 template<int EVFLAG, int GHOST_NEWTON>
 void ForceLJ::compute_halfneigh(Atom &atom, Neighbor &neighbor, int me)
 {
+ // printf("iḿ inside force compute for rank %d\n", me);
   const int nlocal = atom.nlocal;
   const int nall = atom.nlocal + atom.nghost;
   const MMD_float* const x = atom.x;
   MMD_float* const f = atom.f;
   const int* const type = atom.type;
+  
+ // printf("iḿ inside force compute after initialization for rank %d %d %d %d %d\n", me, nall, nlocal, atom.nmax, atom.natoms);
 
   // clear force on own and ghost atoms
   for(int i = 0; i < nall; i++) {
@@ -235,12 +259,17 @@ void ForceLJ::compute_halfneigh(Atom &atom, Neighbor &neighbor, int me)
     f[i * PAD + 2] = 0.0;
   }
 
+ // printf("iḿ inside force compute after force array initialization by rank %d\n", me);
+
+
   // loop over all neighbors of my atoms
   // store force on both atoms i and j
   MMD_float t_energy = 0;
   MMD_float t_virial = 0;
 
   for(int i = 0; i < nlocal; i++) {
+//	  printf("iḿ inside force compute inside for loop for rank %d\n", me);
+
     const int* const neighs = &neighbor.neighbors[i * neighbor.maxneighs];
     const int numneighs = neighbor.numneigh[i];
     const MMD_float xtmp = x[i * PAD + 0];
@@ -292,10 +321,14 @@ void ForceLJ::compute_halfneigh(Atom &atom, Neighbor &neighbor, int me)
     f[i * PAD + 1] += fiy;
     f[i * PAD + 2] += fiz;
 
+  //  printf("iḿ inside force compute for loopl end\n");
+
   }
 
   eng_vdwl += t_energy;
   virial += t_virial;
+//printf("iḿ inside force compute end\n");
+
 
 }
 

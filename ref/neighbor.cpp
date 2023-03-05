@@ -480,3 +480,25 @@ MMD_float Neighbor::bindist(int i, int j, int k)
 
   return (delx * delx + dely * dely + delz * delz);
 }
+
+void Neighbor::growneigh(int n)
+{
+  if(n > nmax) {
+    nmax = n;
+
+    if(numneigh) {
+      free(numneigh);
+    }
+    if(neighbors) {
+      free(neighbors);
+    }
+    numneigh = (int*) malloc(nmax * sizeof(int));
+    neighbors = (int*) malloc(nmax * maxneighs * sizeof(int));
+  }
+}
+
+int Neighbor::getnmax()
+{
+  return nmax;
+}
+

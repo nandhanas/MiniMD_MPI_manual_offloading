@@ -290,11 +290,14 @@ void Comm::communicate(Atom &atom)
   for(iswap = 0; iswap < nswap; iswap++) {
 
     /* pack buffer */
+    if(isHost) {
 
     pbc_flags[0] = pbc_any[iswap];
     pbc_flags[1] = pbc_flagx[iswap];
     pbc_flags[2] = pbc_flagy[iswap];
     pbc_flags[3] = pbc_flagz[iswap];
+
+    }
 
     //#pragma omp barrier
     if(isHost) atom.pack_comm(sendnum[iswap], sendlist[iswap], buf_send, pbc_flags);
@@ -330,28 +333,29 @@ void Comm::communicate(Atom &atom)
     #pragma omp barrier
     /* unpack buffer */
 
-    if(isHost) atom.unpack_comm(recvnum[iswap], firstrecv[iswap], buf);
+    //if(isHost) atom.unpack_comm(recvnum[iswap], firstrecv[iswap], buf);
+    atom.unpack_comm(recvnum[iswap], firstrecv[iswap], buf);
     //#pragma omp barrier
   }
 }
 
-void Comm::force_computation_offload(Atom &atom)
+void Comm::force_computation_offload(Atom &atom, Neighbor &neighbor)
 {
-	int features[2] = {atom.nlocal, atom.nghost};
         int iswap;
         int pbc_flags[4];
+	int features[3]={atom.nlocal, atom.nghost};
 
-	for(iswap = 0; iswap < nswap; iswap++) {
+/*	 for(iswap = 0; iswap < nswap; iswap++) {
 
 		pbc_flags[0] = pbc_any[iswap];
 	        pbc_flags[1] = pbc_flagx[iswap];
     		pbc_flags[2] = pbc_flagy[iswap];
     		pbc_flags[3] = pbc_flagz[iswap];
 
-		atom.pack_comm(sendnum[iswap], sendlist[iswap], buf_send, pbc_flags);
+		if(isHost) atom.pack_comm(sendnum[iswap], sendlist[iswap], buf_send, pbc_flags);
+*/
 
-
-         	if(sendproc[iswap] != me) {
+  //       	if(sendproc[iswap] != me) {
 
                         #pragma omp master
 			{
@@ -359,20 +363,50 @@ void Comm::force_computation_offload(Atom &atom)
 
 				if(isHost)
   				{
-        	 			MPI_Send(features, 2, MPI_INT, BF_pair, 0, BFHost_communicator);
-			 		MPI_Send(buf_send, comm_send_size[iswap], type, BF_pair, 0, BFHost_communicator); 
+					 printf(" The value of host local %d %d %d %d \n",  atom.nlocal, atom.nmax, atom.natoms, atom.nghost);
+ 					 MPI_Send(&atom.nlocal, 1, MPI_INT, BF_pair, 0, BFHost_communicator);
+					MPI_Send(&atom.nghost, 1, MPI_INT, BF_pair, 0, BFHost_communicator);
+					MPI_Send(atom.type, (atom.nlocal+atom.nghost), MPI_INT, BF_pair, 0, BFHost_communicator);
+					MPI_Send(neighbor.numneigh, atom.nlocal, MPI_INT, 1, 0, BFHost_communicator);
+                			MPI_Send(neighbor.neighbors,neighbor.maxneighs*atom.nlocal, MPI_INT, 1, 0, BFHost_communicator);
+					MPI_Send(atom.x, atom.natoms, type, BF_pair, 0, BFHost_communicator);
+                                        MPI_Send(atom.f, atom.natoms, type, BF_pair, 0, BFHost_communicator);                
+			 	//	MPI_Send(buf_send, comm_send_size[iswap], type, BF_pair, 0, BFHost_communicator);
 		  		}
  				if(isBF)
   				{
-         	 			MPI_Recv(features, 2, MPI_INT, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
-			  		MPI_Recv(buf_send, comm_send_size[iswap], type, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
-  				}
-			}
-		}
-		#pragma omp barrier
-                 atom.unpack_comm(recvnum[iswap], firstrecv[iswap], buf);
+					 printf(" The value of BF local before receive %d %d %d %d \n",  atom.nlocal, atom.nmax, atom.natoms, atom.nghost);
+					atom.destroy_2d_MMD_float_array(atom.x);
+					atom.destroy_2d_MMD_float_array(atom.f);
+					MPI_Recv(&atom.nlocal, 1, MPI_INT, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+					MPI_Recv(&atom.nghost, 1, MPI_INT, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+					MPI_Recv(atom.type, (atom.nlocal+atom.nghost), MPI_INT, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+					MPI_Recv(neighbor.numneigh, atom.nlocal, MPI_INT, 0, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+                			MPI_Recv(neighbor.neighbors,neighbor.maxneighs*atom.nlocal, MPI_INT, 0, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+                                        #ifdef ALIGNMALLOC
+    						atom.x = (MMD_float*) _mm_malloc((atom.natoms * PAD+ 1024 + 1) * sizeof(MMD_float), ALIGNMALLOC);
+						atom.f = (MMD_float*) _mm_malloc((atom.natoms * PAD+ 1024 + 1) * sizeof(MMD_float), ALIGNMALLOC);
 
-	}
+  					#else
+    						atom.x = (MMD_float*) malloc((atom.natoms * PAD + 1024 + 1) * sizeof(MMD_float));
+						atom.f = (MMD_float*) malloc((atom.natoms * PAD + 1024 + 1) * sizeof(MMD_float));
+  					#endif
+
+					MPI_Recv(atom.x, atom.natoms, type, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+					MPI_Recv(atom.f, atom.natoms, type, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+			  	//	MPI_Recv(buf_send, comm_send_size[iswap], type, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+		      			printf(" The value of BF local %d %d %d \n",  atom.nlocal, atom.nmax, atom.natoms);
+		//			atom.nlocal = features[0];
+		//			atom.nghost = features[1];
+  				}
+		       }
+			//atom.nlocal = features[0];
+			//atom.nghost = features[0];
+	//	}
+//		#pragma omp barrier
+    //            if(isBF)atom.unpack_comm(recvnum[iswap], firstrecv[iswap], buf);
+
+//	}
  }
 
 
@@ -385,7 +419,7 @@ void Comm::reverse_force_computation_offload(Atom &atom)
 
   for(iswap = nswap - 1; iswap >= 0; iswap--) {
 	
-	atom.pack_reverse(recvnum[iswap], firstrecv[iswap], buf_send);
+	if(isBF) atom.pack_reverse(recvnum[iswap], firstrecv[iswap], buf_send);
         
         if(sendproc[iswap] != me) {
       		#pragma omp master
@@ -394,20 +428,25 @@ void Comm::reverse_force_computation_offload(Atom &atom)
                 	if(isBF)
                 	{
 				MPI_Send(buf_send, reverse_send_size[iswap], type, host_pair, 0, BFHost_communicator);
+			//	MPI_Send(atom.f, atom.natoms, type, host_pair, 0, BFHost_communicator);
+                        //        printf("Iḿ in reverse offload in BF rank %d\n", me);
+                                
                 	}
                 	if(isHost)
                 	{
                         	MPI_Recv(buf_send, reverse_send_size[iswap], type, BF_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+			  //	MPI_Recv(atom.f, atom.natoms, type, BF_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+                          //      printf("Iḿ in reverse offload in host rank %d\n", me);
                 	}
 
        		}
 	}
     
       #pragma omp barrier
-      atom.unpack_reverse(sendnum[iswap], sendlist[iswap], buf_send);
+      if(isHost) atom.unpack_reverse(sendnum[iswap], sendlist[iswap], buf_send);
 
   }
- }
+}
 
 
 /* reverse communication of atom info every timestep */
@@ -423,7 +462,7 @@ void Comm::reverse_communicate(Atom &atom)
 
     // #pragma omp barrier
    
-    atom.pack_reverse(recvnum[iswap], firstrecv[iswap], buf_send);
+    if(isHost) atom.pack_reverse(recvnum[iswap], firstrecv[iswap], buf_send);
     // #pragma omp barrier
     /* exchange with another proc
        if self, set recv buffer to send buffer */
@@ -457,6 +496,7 @@ void Comm::reverse_communicate(Atom &atom)
     /* unpack buffer */
     #pragma omp barrier
     atom.unpack_reverse(sendnum[iswap], sendlist[iswap], buf);
+    //if(isHost) atom.unpack_reverse(sendnum[iswap], sendlist[iswap], buf);
 
     // #pragma omp barrier
   }
@@ -474,14 +514,13 @@ void Comm::exchange(Atom &atom)
   if(do_safeexchange)
     return exchange_all(atom);
 
-  int i, m, n, idim, nsend, nrecv, nrecv1, nrecv2, nlocal;
+  int i, m, n, idim, nsend, nrecv, nrecv1, nrecv2, nlocal, total_nsend;
   MMD_float lo, hi, value;
   MMD_float* x;
-  buf_send_tmp = (MMD_float*) malloc((maxsend + BUFMIN) * sizeof(MMD_float));
-  buf_recv_tmp = (MMD_float*) malloc(maxrecv * sizeof(MMD_float));
 
   /* enforce PBC */
 
+  //if(isHost) atom.pbc();
   atom.pbc();
 
   /* loop over dimensions */
@@ -498,6 +537,7 @@ void Comm::exchange(Atom &atom)
 
     i = nsend = 0;
 
+   // if(isHost) {
     if(idim == 0) {
       lo = atom.box.xlo;
       hi = atom.box.xhi;
@@ -508,11 +548,11 @@ void Comm::exchange(Atom &atom)
       lo = atom.box.zlo;
       hi = atom.box.zhi;
     }
-
+  // }
     x = atom.x;
-
+    
     nlocal = atom.nlocal;
-
+    
     #pragma omp master
     {
       if(nlocal > maxnlocal) {
@@ -565,7 +605,7 @@ void Comm::exchange(Atom &atom)
 
     #pragma omp master
     {
-      int total_nsend = 0;
+      total_nsend = 0;
 
       for(int i = 0; i < threads->omp_num_threads; i++) {
         total_nsend += nsend_thread[i];
@@ -577,7 +617,7 @@ void Comm::exchange(Atom &atom)
 
     #pragma omp barrier
 
-    int total_nsend = nsend_thread[threads->omp_num_threads - 1];
+    total_nsend = nsend_thread[threads->omp_num_threads - 1];
     int nholes = 0;
 
     for(int i = 0; i < nsend; i++)
@@ -607,25 +647,27 @@ void Comm::exchange(Atom &atom)
       if(send_flag[j]) holes++;
     }
 
-
     for(int k = 0; k < nsend; k++) {
-      atom.pack_exchange(exc_sendlist_thread[tid][k], &buf_send[(k + nsend_thread[tid] - nsend) * 7]);
+     //if(isHost)  
+	     atom.pack_exchange(exc_sendlist_thread[tid][k], &buf_send[(k + nsend_thread[tid] - nsend) * 7]);
       
       if(exc_sendlist_thread[tid][k] < nlocal - total_nsend) {
         while(!send_flag[j]) j++;
 
         atom.copy(j++, exc_sendlist_thread[tid][k]);
+	
       }
     }
-   // memcpy(buf_send_tmp, buf_send, sizeof(buf_send));
-
+   
     nsend *= 7;
+    
     #pragma omp barrier
     #pragma omp master
     {
       {
-      atom.nlocal = nlocal - total_nsend;
-      nsend = total_nsend * 7;
+	 atom.nlocal = nlocal - total_nsend;
+      	 nsend = total_nsend * 7;
+      
 
       /* send/recv atoms in both directions
          only if neighboring procs are different */
@@ -669,7 +711,7 @@ void Comm::exchange(Atom &atom)
 	     nrecv += nrecv2;
       }
 
-      if(nrecv > maxrecv && isHost) growrecv(nrecv);
+      if(nrecv > maxrecv) growrecv(nrecv);
 
       MPI_Datatype type = (sizeof(MMD_float) == 4) ? MPI_FLOAT : MPI_DOUBLE;
       if(isHost)
@@ -711,17 +753,18 @@ void Comm::exchange(Atom &atom)
 
       }
 
+      
       nrecv_atoms = nrecv / 7;
 
       for(int i = 0; i < threads->omp_num_threads; i++)
         nrecv_thread[i] = 0;
+      
      }
-     //memcpy(buf_recv, buf_recv_tmp, sizeof(buf_recv));
     }
     /* check incoming atoms to see if they are in my box
        if they are, add to my list */
 
-   
+   //if(isHost){
     #pragma omp barrier
 
     nrecv = 0;
@@ -760,7 +803,7 @@ void Comm::exchange(Atom &atom)
       if(value >= lo && value < hi)
         atom.unpack_exchange(copyinpos++, &buf_recv[i * 7]);
     }
-
+   // }
     // #pragma omp barrier
     
   }
@@ -774,7 +817,8 @@ void Comm::exchange_all(Atom &atom)
 
   /* enforce PBC */
 
-  atom.pbc();
+  //if(isHost) 
+	  atom.pbc();
 
   /* loop over dimensions */
   int iswap = 0;
@@ -793,6 +837,7 @@ void Comm::exchange_all(Atom &atom)
 
     i = nsend = 0;
 
+   // if(isHost) {
     if(idim == 0) {
       lo = atom.box.xlo;
       hi = atom.box.xhi;
@@ -803,7 +848,7 @@ void Comm::exchange_all(Atom &atom)
       lo = atom.box.zlo;
       hi = atom.box.zhi;
     }
-
+   // }
     x = atom.x;
 
     nlocal = atom.nlocal;
@@ -812,7 +857,7 @@ void Comm::exchange_all(Atom &atom)
       if(x[i * PAD + idim] < lo || x[i * PAD + idim] >= hi) {
         if(nsend > maxsend) growsend(nsend);
 
-        nsend += atom.pack_exchange(i, &buf_send[nsend]);
+        if(isHost) nsend += atom.pack_exchange(i, &buf_send[nsend]);
         atom.copy(nlocal - 1, i);
         nlocal--;
       } else i++;
@@ -867,7 +912,7 @@ void Comm::exchange_all(Atom &atom)
 
         /* check incoming atoms to see if they are in my box
         *        if they are, add to my list */
-         
+  //      if(isHost) {     
         n = atom.nlocal;
         m = 0;
 
@@ -880,6 +925,7 @@ void Comm::exchange_all(Atom &atom)
         }
 
         atom.nlocal = n;
+//	}
       }
 
       iswap += 1;
@@ -970,6 +1016,7 @@ void Comm::borders(Atom &atom)
       nsend = 0;
       m = 0;
 
+    //  if(isHost) {      
       #pragma omp for
       for(int i = nfirst; i < nlast; i++) {
         if(x[i * PAD + idim] >= lo && x[i * PAD + idim] <= hi) {
@@ -981,7 +1028,7 @@ void Comm::borders(Atom &atom)
           exc_sendlist_thread[tid][nsend++] = i;
         }
       }
-
+     // }
       nsend_thread[tid] = nsend;
 
       #pragma omp barrier
@@ -999,13 +1046,15 @@ void Comm::borders(Atom &atom)
 
         if(total_nsend * 4 > maxsend) growsend(total_nsend * 4);
       }
+
+      //if(isHost) {
       #pragma omp barrier
      
       for(int k = 0; k < nsend; k++) {
         atom.pack_border(exc_sendlist_thread[tid][k], &buf_send[(k + nsend_thread[tid] - nsend) * 4], pbc_flags);
         sendlist[iswap][k + nsend_thread[tid] - nsend] = exc_sendlist_thread[tid][k];
       }
-     
+     // }
       #pragma omp barrier
 
  //    memcpy(buf_send_tmp, buf_send, sizeof(buf_send));
@@ -1038,9 +1087,9 @@ void Comm::borders(Atom &atom)
 		MPI_Send(&nrecv, 1, MPI_INT, host_pair, 0, BFHost_communicator);
 
           }
-          if((nrecv * atom.border_size > maxrecv) ) growrecv(nrecv * atom.border_size);
+          if((nrecv * atom.border_size > maxrecv)) growrecv(nrecv * atom.border_size);
           MPI_Datatype type = (sizeof(MMD_float) == 4) ? MPI_FLOAT : MPI_DOUBLE;
-
+         
 
 	 if(isHost)
           {
@@ -1072,17 +1121,18 @@ void Comm::borders(Atom &atom)
 
         nrecv_atoms = nrecv;
      }
-  
+      
 
       /* unpack buffer */
-     
+      
       #pragma omp barrier
       n = atom.nlocal + atom.nghost;
       nrecv = nrecv_atoms;
-      
+
+
       #pragma omp for
       for(int i = 0; i < nrecv; i++)
-        atom.unpack_border(n + i, &buf[i * 4]);
+         atom.unpack_border(n + i, &buf[i * 4]);
 
       //#pragma omp barrier
 
@@ -1100,11 +1150,14 @@ void Comm::borders(Atom &atom)
         atom.nghost += nrecv;
       }
 
+      
       #pragma omp barrier
       iswap++;
+	
       }
   }
-
+  
+//if(isHost) {
   int max1, max2;
   max1 = max2 = 0;
 
@@ -1116,7 +1169,7 @@ void Comm::borders(Atom &atom)
   if(max1 > maxsend) growsend(max1);
 
   if(max2 > maxrecv) growrecv(max2);
-
+//}
 }
 
 /* realloc the size of the send buffer as needed with BUFFACTOR & BUFEXTRA */

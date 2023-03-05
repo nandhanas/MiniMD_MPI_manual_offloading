@@ -122,6 +122,7 @@ void Thermo::compute(MMD_int iflag, Atom &atom, Neighbor &neighbor, Force* force
 MMD_float Thermo::energy(Atom &atom, Neighbor &neighbor, Force* force)
 {
   e_act = force->eng_vdwl;
+  //printf ("the energy %f \n", e_act);
 
   if(neighbor.halfneigh) {
     e_act *= 2.0;

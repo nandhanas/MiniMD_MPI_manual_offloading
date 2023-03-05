@@ -447,11 +447,11 @@ int main(int argc, char** argv)
 
     if(in.forcetype == FORCEEAM) atom.mass = force->mass;
 
-     create_atoms(atom, in.nx, in.ny, in.nz, in.rho);
+    create_atoms(atom, in.nx, in.ny, in.nz, in.rho);
 
-     thermo.setup(in.rho, integrate, atom, in.units);
+    thermo.setup(in.rho, integrate, atom, in.units);
     
-     if(isHost) create_velocity(in.t_request, atom, thermo);
+    if(isHost) create_velocity(in.t_request, atom, thermo);
     
   }
 
@@ -490,19 +490,19 @@ int main(int argc, char** argv)
   
  
   comm.exchange(atom);
+//  printf("Iḿ %d after comm exchange\n", BFhost_rank);
   if((sort>0))
     atom.sort(neighbor);
+ // printf("Iḿ %d after atom sort\n", BFhost_rank);
   comm.borders(atom);
+ // printf("Iḿ %d after border \n", BFhost_rank);
   force->evflag = 1;
 
   #pragma omp parallel
   {
     neighbor.build(atom);
-
-    
     force->compute(atom, neighbor, comm, me);
   }
-   //MPI_Barrier(BFHost_communicator);
 
   if(neighbor.halfneigh && neighbor.ghost_newton)
   {

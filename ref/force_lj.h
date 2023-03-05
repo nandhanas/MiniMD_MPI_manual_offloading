@@ -38,6 +38,7 @@
 #include "types.h"
 #include "force.h"
 #include "comm.h"
+#include <cstring>
 
 class ForceLJ : Force
 {
@@ -47,6 +48,7 @@ class ForceLJ : Force
     virtual ~ForceLJ();
     void setup();
     void compute(Atom &, Neighbor &, Comm &, int);
+    void reverse_offload(Atom &, Comm &) ;
 
   protected:
     template<int EVFLAG>

@@ -57,7 +57,8 @@ class Neighbor
     ~Neighbor();
     int setup(Atom &);               // setup bins based on box and cutoff
     void build(Atom &);              // create neighbor list
-
+    void growneigh(int );
+    int getnmax();
     Timer* timer;
 
     ThreadData* threads;

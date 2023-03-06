@@ -97,7 +97,7 @@ int main(int argc, char** argv)
   MPI_Init(&argc, &argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &me);
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
-//  printf("My rank number is %d and the communicator size is %d\n", me, nprocs);
+  //printf("My rank number is %d and the communicator size is %d\n", me, nprocs);
   char processor[MPI_MAX_PROCESSOR_NAME];
   int name_len;
   MPI_Get_processor_name(processor, &name_len);
@@ -110,7 +110,7 @@ int main(int argc, char** argv)
          key = 1;
          color = (processor[10]-'0')*10+(processor[11]-'0');
 	 host_pair = me - (nprocs/2);
-	 //printf(" Im rank %d inside BF , host pair %d\n", me, host_pair);
+//	 printf(" Im rank %d inside BF , host pair %d\n", me, host_pair);
   }
   else
   {
@@ -119,9 +119,10 @@ int main(int argc, char** argv)
          key = 0;
          color = (processor[8]-'0')*10+(processor[9]-'0');
 	 BF_pair = me + (nprocs/2);
-	 //printf(" Im rank %d inside host BF pair %d\n", me, BF_pair);
+//	 printf(" Im rank %d inside host BF pair %d\n", me, BF_pair);
   }
-  MPI_Comm_split(MPI_COMM_WORLD, color, key, &BFHost_communicator); //communicator for host and bf with same device number
+  MPI_Comm_dup(MPI_COMM_WORLD, &BFHost_communicator);
+//  MPI_Comm_split(MPI_COMM_WORLD, color, key, &BFHost_communicator); //communicator for host and bf with same device number
   MPI_Comm_split(MPI_COMM_WORLD, isHost, color, &hosts_communicator); // communicator for all the hosts with rank as the device number
   MPI_Comm_split(MPI_COMM_WORLD, isBF, color, &BFs_communicator);  // communicator for all the BFs with rank as the device number
   //int hosts_comm_size, bfhost_comm_size, BF_comm_size, host_rank, BFhost_rank, BF_rank;
@@ -131,7 +132,7 @@ int main(int argc, char** argv)
   MPI_Comm_rank(hosts_communicator, &host_rank);
   MPI_Comm_size(BFs_communicator, &BF_comm_size);
   MPI_Comm_rank(BFs_communicator, &BF_rank);
- // printf("BF_Host Rank %d, Host rank %d, BF rank %d, BF_Host comm size = %d, Host comm size = %d, BF comm size =%d\n", BFhost_rank, host_rank, BF_rank, bfhost_comm_size, hosts_comm_size, BF_comm_size);
+  //printf("BF_Host Rank %d, Host rank %d, BF rank %d, BF_Host comm size = %d, Host comm size = %d, BF comm size =%d\n", BFhost_rank, host_rank, BF_rank, bfhost_comm_size, hosts_comm_size, BF_comm_size);
   
 
   if(isHost)
@@ -490,12 +491,12 @@ int main(int argc, char** argv)
   
  
   comm.exchange(atom);
-//  printf("Iḿ %d after comm exchange\n", BFhost_rank);
+  //printf("Iḿ %d after comm exchange\n", BFhost_rank);
   if((sort>0))
     atom.sort(neighbor);
- // printf("Iḿ %d after atom sort\n", BFhost_rank);
+  //printf("Iḿ %d after atom sort\n", BFhost_rank);
   comm.borders(atom);
- // printf("Iḿ %d after border \n", BFhost_rank);
+  //printf("Iḿ %d after border \n", BFhost_rank);
   force->evflag = 1;
 
   #pragma omp parallel

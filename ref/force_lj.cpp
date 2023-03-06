@@ -71,7 +71,7 @@ void ForceLJ::setup()
 void ForceLJ::reverse_offload(Atom &atom, Comm &comm)
 {
 
-//        comm.reverse_force_computation_offload(atom);
+        comm.reverse_force_computation_offload(atom);
 	MMD_float features[2] = {eng_vdwl, virial};
 	MPI_Datatype type = (sizeof(MMD_float) == 4) ? MPI_FLOAT : MPI_DOUBLE;
 

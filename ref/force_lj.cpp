@@ -72,20 +72,23 @@ void ForceLJ::reverse_offload(Atom &atom, Comm &comm)
 {
 
         comm.reverse_force_computation_offload(atom);
-	MMD_float features[2] = {eng_vdwl, virial};
-	MPI_Datatype type = (sizeof(MMD_float) == 4) ? MPI_FLOAT : MPI_DOUBLE;
+	#pragma omp master
+	{
+		MMD_float features[2] = {eng_vdwl, virial};
+		MPI_Datatype type = (sizeof(MMD_float) == 4) ? MPI_FLOAT : MPI_DOUBLE;
 
-	if(isBF)
-        {
-		MPI_Send(features, 2, type, host_pair, 0, BFHost_communicator);
+		if(isBF)
+        	{
+			MPI_Send(features, 2, type, host_pair, 0, BFHost_communicator);
 
-        }
-        if(isHost)
-        {
-		MPI_Recv(features, 2, type, BF_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
-                eng_vdwl = features[0];
-		virial = features[1];
-        }
+        	}
+        	if(isHost)
+        	{
+			MPI_Recv(features, 2, type, BF_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
+                	eng_vdwl = features[0];
+			virial = features[1];
+        	}
+	}
         
 }
 
@@ -94,15 +97,12 @@ void ForceLJ::compute(Atom &atom, Neighbor &neighbor, Comm &comm, int me)
 {
   eng_vdwl = 0;
   virial = 0;
- 
-
   if(evflag) {
     if(use_oldcompute)
       return compute_original<1>(atom, neighbor, me);
 
     if(neighbor.halfneigh) {
       if(neighbor.ghost_newton) {
-//	comm.force_computation_offload(atom, neighbor);
 	if(isBF)//offload to DPU
 	{
         	if(threads->omp_num_threads > 1)
@@ -110,7 +110,6 @@ void ForceLJ::compute(Atom &atom, Neighbor &neighbor, Comm &comm, int me)
         	else
           		compute_halfneigh<1, 1>(atom, neighbor, me);
 	}
-	reverse_offload(atom, comm);
 	return;
       } else {
         if(isHost) //offload to GPU
@@ -140,7 +139,6 @@ void ForceLJ::compute(Atom &atom, Neighbor &neighbor, Comm &comm, int me)
     }
     if(neighbor.halfneigh) {
       if(neighbor.ghost_newton) {
-//	comm.force_computation_offload(atom, neighbor);
 	if(isBF) //offload to DPU
         {
         	if(threads->omp_num_threads > 1)
@@ -148,7 +146,6 @@ void ForceLJ::compute(Atom &atom, Neighbor &neighbor, Comm &comm, int me)
         	else
                 	 compute_halfneigh<0, 1>(atom, neighbor, me);
 	}
-	reverse_offload(atom, comm);
 	return;
       } else {
 	if(isHost) //offload to GPU

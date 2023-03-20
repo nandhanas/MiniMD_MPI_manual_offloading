@@ -34,6 +34,8 @@
 #include "integrate.h"
 #include "openmp.h"
 #include "math.h"
+#include<chrono>
+#include<thread>
 
 Integrate::Integrate() {sort_every=20;}
 Integrate::~Integrate() {}
@@ -154,7 +156,7 @@ void Integrate::run(Atom &atom, Force* force, Neighbor &neighbor,
           comm.exchange(atom);
 
           if(n+1>=next_sort) {
-            atom.sort(neighbor);
+            if((atom.nlocal != 0) && (isHost))  atom.sort(neighbor);
             next_sort +=  sort_every;
           }
           comm.borders(atom);
@@ -171,8 +173,9 @@ void Integrate::run(Atom &atom, Force* force, Neighbor &neighbor,
 
         #pragma omp barrier
 
-         neighbor.build(atom);
+         if((nlocal != 0)) neighbor.build(atom);
         // #pragma omp barrier
+
 
         #pragma omp master
         timer.stamp(TIME_NEIGH);
@@ -182,11 +185,25 @@ void Integrate::run(Atom &atom, Force* force, Neighbor &neighbor,
       force->evflag = (n + 1) % thermo.nstat == 0;
       force->compute(atom, neighbor, comm, comm.me);
 
-      #pragma omp master
-      timer.stamp(TIME_FORCE);
-      if(neighbor.halfneigh && neighbor.ghost_newton) {
-        comm.reverse_communicate(atom);
+      /*if(isHost) {
+         #pragma omp master
+         timer.stamp(TIME_FORCE);
 
+         double test = 500000*timer.array[TIME_FORCE];
+         int t = 9999+test;
+         std::this_thread::sleep_for(std::chrono::microseconds(t));
+       }*/
+
+      #pragma omp master
+       timer.stamp(TIME_FORCE);
+      
+      if(neighbor.halfneigh && neighbor.ghost_newton) {
+
+        force->reverse_offload(atom, comm);
+	#pragma omp master
+        timer.stamp(TIME_COMM);
+
+	comm.reverse_communicate(atom);
         #pragma omp master
         timer.stamp(TIME_COMM);
       }
@@ -197,7 +214,6 @@ void Integrate::run(Atom &atom, Force* force, Neighbor &neighbor,
       nlocal = atom.nlocal;
 
       #pragma omp barrier
-
       finalIntegrate();
 
       if(thermo.nstat && isHost) thermo.compute(n + 1, atom, neighbor, force, timer, comm);

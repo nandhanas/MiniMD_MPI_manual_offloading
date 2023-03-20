@@ -339,77 +339,6 @@ void Comm::communicate(Atom &atom)
   }
 }
 
-void Comm::force_computation_offload(Atom &atom, Neighbor &neighbor)
-{
-        int iswap;
-        int pbc_flags[4];
-	int features[3]={atom.nlocal, atom.nghost};
-
-/*	 for(iswap = 0; iswap < nswap; iswap++) {
-
-		pbc_flags[0] = pbc_any[iswap];
-	        pbc_flags[1] = pbc_flagx[iswap];
-    		pbc_flags[2] = pbc_flagy[iswap];
-    		pbc_flags[3] = pbc_flagz[iswap];
-
-		if(isHost) atom.pack_comm(sendnum[iswap], sendlist[iswap], buf_send, pbc_flags);
-*/
-
-  //       	if(sendproc[iswap] != me) {
-
-                        #pragma omp master
-			{
- 				MPI_Datatype type = (sizeof(MMD_float) == 4) ? MPI_FLOAT : MPI_DOUBLE;
-
-				if(isHost)
-  				{
-					 printf(" The value of host local %d %d %d %d \n",  atom.nlocal, atom.nmax, atom.natoms, atom.nghost);
- 					 MPI_Send(&atom.nlocal, 1, MPI_INT, BF_pair, 0, BFHost_communicator);
-					MPI_Send(&atom.nghost, 1, MPI_INT, BF_pair, 0, BFHost_communicator);
-					MPI_Send(atom.type, (atom.nlocal+atom.nghost), MPI_INT, BF_pair, 0, BFHost_communicator);
-					MPI_Send(neighbor.numneigh, atom.nlocal, MPI_INT, 1, 0, BFHost_communicator);
-                			MPI_Send(neighbor.neighbors,neighbor.maxneighs*atom.nlocal, MPI_INT, 1, 0, BFHost_communicator);
-					MPI_Send(atom.x, atom.natoms, type, BF_pair, 0, BFHost_communicator);
-                                        MPI_Send(atom.f, atom.natoms, type, BF_pair, 0, BFHost_communicator);                
-			 	//	MPI_Send(buf_send, comm_send_size[iswap], type, BF_pair, 0, BFHost_communicator);
-		  		}
- 				if(isBF)
-  				{
-					 printf(" The value of BF local before receive %d %d %d %d \n",  atom.nlocal, atom.nmax, atom.natoms, atom.nghost);
-					atom.destroy_2d_MMD_float_array(atom.x);
-					atom.destroy_2d_MMD_float_array(atom.f);
-					MPI_Recv(&atom.nlocal, 1, MPI_INT, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
-					MPI_Recv(&atom.nghost, 1, MPI_INT, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
-					MPI_Recv(atom.type, (atom.nlocal+atom.nghost), MPI_INT, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
-					MPI_Recv(neighbor.numneigh, atom.nlocal, MPI_INT, 0, 0, BFHost_communicator, MPI_STATUS_IGNORE);
-                			MPI_Recv(neighbor.neighbors,neighbor.maxneighs*atom.nlocal, MPI_INT, 0, 0, BFHost_communicator, MPI_STATUS_IGNORE);
-                                        #ifdef ALIGNMALLOC
-    						atom.x = (MMD_float*) _mm_malloc((atom.natoms * PAD+ 1024 + 1) * sizeof(MMD_float), ALIGNMALLOC);
-						atom.f = (MMD_float*) _mm_malloc((atom.natoms * PAD+ 1024 + 1) * sizeof(MMD_float), ALIGNMALLOC);
-
-  					#else
-    						atom.x = (MMD_float*) malloc((atom.natoms * PAD + 1024 + 1) * sizeof(MMD_float));
-						atom.f = (MMD_float*) malloc((atom.natoms * PAD + 1024 + 1) * sizeof(MMD_float));
-  					#endif
-
-					MPI_Recv(atom.x, atom.natoms, type, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
-					MPI_Recv(atom.f, atom.natoms, type, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
-			  	//	MPI_Recv(buf_send, comm_send_size[iswap], type, host_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
-		      			printf(" The value of BF local %d %d %d \n",  atom.nlocal, atom.nmax, atom.natoms);
-		//			atom.nlocal = features[0];
-		//			atom.nghost = features[1];
-  				}
-		       }
-			//atom.nlocal = features[0];
-			//atom.nghost = features[0];
-	//	}
-//		#pragma omp barrier
-    //            if(isBF)atom.unpack_comm(recvnum[iswap], firstrecv[iswap], buf);
-
-//	}
- }
-
-
 
 /* reverse offload from BF to host for boundary atom info every timestep */
 
@@ -428,15 +357,11 @@ void Comm::reverse_force_computation_offload(Atom &atom)
                 	if(isBF)
                 	{
 				MPI_Send(buf_send, reverse_send_size[iswap], type, host_pair, 0, BFHost_communicator);
-			//	MPI_Send(atom.f, atom.natoms, type, host_pair, 0, BFHost_communicator);
-                        //        printf("Iḿ in reverse offload in BF rank %d\n", me);
                                 
                 	}
                 	if(isHost)
                 	{
                         	MPI_Recv(buf_send, reverse_send_size[iswap], type, BF_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
-			  //	MPI_Recv(atom.f, atom.natoms, type, BF_pair, 0, BFHost_communicator, MPI_STATUS_IGNORE);
-                          //      printf("Iḿ in reverse offload in host rank %d\n", me);
                 	}
 
        		}
@@ -460,7 +385,7 @@ void Comm::reverse_communicate(Atom &atom)
 
     /* pack buffer */
 
-    // #pragma omp barrier
+    //#pragma omp barrier
    
     if(isHost) atom.pack_reverse(recvnum[iswap], firstrecv[iswap], buf_send);
     // #pragma omp barrier

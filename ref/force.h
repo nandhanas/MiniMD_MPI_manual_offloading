@@ -53,6 +53,7 @@ class Force
     virtual void setup() {};
     virtual void finalise() {};
     virtual void compute(Atom &, Neighbor &, Comm &, int) {};
+    virtual void reverse_offload(Atom &, Comm &) {};
 
     int use_sse;
     int use_oldcompute;

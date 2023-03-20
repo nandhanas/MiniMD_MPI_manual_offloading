@@ -354,7 +354,6 @@ void Atom::destroy_1d_int_array(int* array)
 
 void Atom::sort(Neighbor &neighbor)
 {
-
   neighbor.binatoms(*this,nlocal);
   #pragma omp barrier
 

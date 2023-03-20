@@ -46,7 +46,6 @@ class Comm
     int setup(MMD_float, Atom &);
     void communicate(Atom &);
     void reverse_communicate(Atom &);
-    void force_computation_offload(Atom &, Neighbor &);
     void reverse_force_computation_offload(Atom &);
     void neighbor_to_BF(Atom &, Neighbor &);
     void exchange(Atom &);

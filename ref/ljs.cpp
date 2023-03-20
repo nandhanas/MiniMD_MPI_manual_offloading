@@ -67,7 +67,7 @@ int main(int argc, char** argv)
   in.datafile = NULL;
   int me = 0;                   //local MPI rank
   int nprocs = 1;               //number of MPI ranks
-  int num_threads = 1;		//number of OpenMP threads
+  int num_threads = 8;		//number of OpenMP threads
   int num_steps = -1;           //number of timesteps (if -1 use value from lj.in)
   int system_size = -1;         //size of the system (if -1 use value from lj.in)
   int nx = -1;
@@ -110,7 +110,7 @@ int main(int argc, char** argv)
          key = 1;
          color = (processor[10]-'0')*10+(processor[11]-'0');
 	 host_pair = me - (nprocs/2);
-//	 printf(" Im rank %d inside BF , host pair %d\n", me, host_pair);
+	 //printf(" Im rank %d inside BF , host pair %d\n", me, host_pair);
   }
   else
   {
@@ -119,7 +119,7 @@ int main(int argc, char** argv)
          key = 0;
          color = (processor[8]-'0')*10+(processor[9]-'0');
 	 BF_pair = me + (nprocs/2);
-//	 printf(" Im rank %d inside host BF pair %d\n", me, BF_pair);
+	// printf(" Im rank %d inside host BF pair %d\n", me, BF_pair);
   }
   MPI_Comm_dup(MPI_COMM_WORLD, &BFHost_communicator);
 //  MPI_Comm_split(MPI_COMM_WORLD, color, key, &BFHost_communicator); //communicator for host and bf with same device number
@@ -132,7 +132,7 @@ int main(int argc, char** argv)
   MPI_Comm_rank(hosts_communicator, &host_rank);
   MPI_Comm_size(BFs_communicator, &BF_comm_size);
   MPI_Comm_rank(BFs_communicator, &BF_rank);
-  //printf("BF_Host Rank %d, Host rank %d, BF rank %d, BF_Host comm size = %d, Host comm size = %d, BF comm size =%d\n", BFhost_rank, host_rank, BF_rank, bfhost_comm_size, hosts_comm_size, BF_comm_size);
+ // printf("BF_Host Rank %d, Host rank %d, BF rank %d, BF_Host comm size = %d, Host comm size = %d, BF comm size =%d\n", BFhost_rank, host_rank, BF_rank, bfhost_comm_size, hosts_comm_size, BF_comm_size);
   
 
   if(isHost)
@@ -491,24 +491,25 @@ int main(int argc, char** argv)
   
  
   comm.exchange(atom);
-  //printf("Iḿ %d after comm exchange\n", BFhost_rank);
   if((sort>0))
     atom.sort(neighbor);
-  //printf("Iḿ %d after atom sort\n", BFhost_rank);
   comm.borders(atom);
-  //printf("Iḿ %d after border \n", BFhost_rank);
   force->evflag = 1;
 
   #pragma omp parallel
   {
     neighbor.build(atom);
     force->compute(atom, neighbor, comm, me);
+
   }
 
   if(neighbor.halfneigh && neighbor.ghost_newton)
   {
+    force->reverse_offload(atom, comm);	  
     comm.reverse_communicate(atom);
   }
+
+
 
   if(me == 0) printf("# Starting dynamics ...\n");
 
@@ -520,13 +521,14 @@ int main(int argc, char** argv)
     	thermo.compute(0, atom, neighbor, force, timer, comm);
   }
  
-  timer.barrier_start(TIME_TOTAL);
-  integrate.run(atom, force, neighbor, comm, thermo, timer);
-  timer.barrier_stop(TIME_TOTAL);
- 
   int natoms;
   MPI_Allreduce(&atom.nlocal, &natoms, 1, MPI_INT, MPI_SUM, temp_communicator);
 
+
+  timer.barrier_start(TIME_TOTAL);
+  integrate.run(atom, force, neighbor, comm, thermo, timer);
+  timer.barrier_stop(TIME_TOTAL);
+   
 
   force->evflag = 1;
   force->compute(atom, neighbor, comm, me);
